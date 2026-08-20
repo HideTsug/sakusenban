@@ -525,8 +525,17 @@ class Board:
         js = js.replace("'__BOARD_KEY__'", script_safe_json(meta["key"]))
         js = js.replace("'__REPORT_HEAD__'", script_safe_json(report_head))
 
-        parts = [LICENSE_COMMENT,
-                 f'<meta charset="utf-8">\n<title>{esc(title)}</title>\n<style>{css}</style>\n<main>']
+        parts = ['<!doctype html>',
+                 '<html lang="ja">',
+                 '<head>',
+                 '<meta charset="utf-8">',
+                 '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                 f'<title>{esc(title)}</title>',
+                 LICENSE_COMMENT,
+                 f'<style>{css}</style>',
+                 '</head>',
+                 '<body>',
+                 '<main>']
         parts.append(f'<div class="head"><h1>{esc(title)}</h1>{stamp_html}</div>')
         parts.append('<div class="counts">' + "".join(counts) + '</div>')
         parts.append(legend)
@@ -548,6 +557,8 @@ class Board:
             '<textarea class="fallback" id="fallback" style="display:none" readonly></textarea>'
             '<span class="hint">貼り先: チャット or 該当issueコメント</span></div>')
         parts.append(f'<script>{js}</script></main>')
+        parts.append('</body>')
+        parts.append('</html>')
         return "\n".join(parts)
 
 

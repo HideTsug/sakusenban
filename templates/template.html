@@ -1,3 +1,9 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>サンプル作戦盤</title>
 <!--
 MIT License
 
@@ -21,8 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 -->
-<meta charset="utf-8">
-<title>サンプル作戦盤</title>
 <style>:root{--bg:#f5f7f9;--surface:#ffffff;--ink:#1f2933;--muted:#6b7682;--line:#e3eaf5;
 --brand:#6d9eeb;--brand-hover:#5a8bd8;--human:#2f5fa8;--human-accent:#6d9eeb;--human-soft:#eef4fe;
 --ai:#495057;--ai-accent:#8c95a3;--ai-soft:#eef1f5;--warn:#9a5b00;--warn-accent:#f5a623;--warn-soft:#fff4e6;
@@ -169,6 +173,8 @@ textarea.fallback{width:100%;max-width:640px;height:7em;font-size:.8rem;margin-t
 .twisty{transition:transform .12s}
 }
 </style>
+</head>
+<body>
 <main>
 <div class="head"><h1>サンプル作戦盤</h1><span class="stamp">生成 2026-08-20 00:00 ／ 状態の正本は examples/state.json</span></div>
 <div class="counts"><div class="count urgent"><b>12日</b><span>納品期限 まで</span></div><div class="count"><b>0/5</b><span>完了 / 全タスク</span></div></div>
@@ -277,3 +283,5 @@ textarea.fallback{width:100%;max-width:640px;height:7em;font-size:.8rem;margin-t
   updateCounts();
 })();
 </script></main>
+</body>
+</html>
