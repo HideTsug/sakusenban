@@ -1,0 +1,256 @@
+<meta charset="utf-8">
+<title>サンプル作戦盤</title>
+<style>:root{--bg:#f5f7f9;--surface:#ffffff;--ink:#1f2933;--muted:#6b7682;--line:#e3eaf5;
+--brand:#6d9eeb;--brand-hover:#5a8bd8;--human:#2f5fa8;--human-accent:#6d9eeb;--human-soft:#eef4fe;
+--ai:#495057;--ai-accent:#8c95a3;--ai-soft:#eef1f5;--warn:#9a5b00;--warn-accent:#f5a623;--warn-soft:#fff4e6;
+--ok:#059669;--ok-soft:#e6f4ee;--block:#6c757d;--block-soft:#eef1f5;--urgent:#d23b3b;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+--bg:#15181d;--surface:#1e242c;--ink:#e8edf4;--muted:#98a4b3;--line:#2c3644;
+--brand:#6d9eeb;--brand-hover:#5a8bd8;--human:#8fb3f0;--human-accent:#6d9eeb;--human-soft:#1f2a3d;
+--ai:#aeb9c4;--ai-accent:#5c6a79;--ai-soft:#242b33;--warn:#e5b566;--warn-accent:#c98a2e;--warn-soft:#33291a;
+--ok:#67c29a;--ok-soft:#1c2f26;--block:#8a96a3;--block-soft:#232a31;--urgent:#e06c6c;
+}}
+:root[data-theme="dark"]{
+--bg:#15181d;--surface:#1e242c;--ink:#e8edf4;--muted:#98a4b3;--line:#2c3644;
+--brand:#6d9eeb;--brand-hover:#5a8bd8;--human:#8fb3f0;--human-accent:#6d9eeb;--human-soft:#1f2a3d;
+--ai:#aeb9c4;--ai-accent:#5c6a79;--ai-soft:#242b33;--warn:#e5b566;--warn-accent:#c98a2e;--warn-soft:#33291a;
+--ok:#67c29a;--ok-soft:#1c2f26;--block:#8a96a3;--block-soft:#232a31;--urgent:#e06c6c;
+}
+*{box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{background:var(--bg);color:var(--ink);margin:0;padding:24px 12px 96px;
+font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif;line-height:1.65}
+main{max-width:960px;margin:0 auto}
+a{color:inherit}
+h1{font-size:1.45rem;margin:0;letter-spacing:.04em;font-weight:800}
+h2{font-size:1.05rem;margin:2.2em 0 .7em;padding-bottom:.3em;border-bottom:1px solid var(--line);letter-spacing:.06em;font-weight:800}
+h2 .sub{font-weight:normal;color:var(--muted);font-size:.8rem;margin-left:.8em}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}
+.stamp{color:var(--muted);font-size:.75rem}
+.counts{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.count{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 14px;min-width:118px}
+.count b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums;line-height:1.2;font-weight:900}
+.count.urgent b{color:var(--urgent)}
+.count span{font-size:.72rem;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.72rem;color:var(--muted);margin-top:10px}
+.dot{display:inline-block;width:.7em;height:.7em;border-radius:50%;margin-right:.35em}
+.quickstrip{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.quickchip{display:inline-flex;align-items:center;gap:4px;background:var(--brand);border:1px solid transparent;
+color:var(--bg);border-radius:999px;padding:6px 12px;text-decoration:none;font-size:.82rem;font-weight:700;line-height:1.25;
+box-shadow:0 4px 15px rgba(109,158,235,.3)}
+.quickchip:hover{box-shadow:0 6px 20px rgba(109,158,235,.4)}
+.quickchip:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.stream{margin-top:18px}
+.stream>h2{margin-top:1.6em}
+.flowgrid{display:grid;grid-template-columns:repeat(var(--lanes),minmax(0,1fr));gap:7px;align-items:stretch}
+.lanehead{min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 4px;text-align:center;
+font-size:.66rem;font-weight:700;color:var(--muted);line-height:1.3;overflow-wrap:anywhere}
+.lanecell{min-width:0;min-height:86px;border-radius:8px;padding:4px;display:flex;align-items:flex-start}
+.flowbox{width:100%;min-width:0;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--block);
+border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.flowbox.human{border-left-color:var(--human-accent)}
+.flowbox.ai{border-left-color:var(--ai-accent)}
+.flowbox.joint{border-left-color:var(--warn-accent)}
+.flowbox.done,.flowbox.alldone{opacity:.5;filter:grayscale(.85)}
+.boxhead{appearance:none;-webkit-appearance:none;width:100%;margin:0;border:0;background:transparent;color:inherit;
+font:inherit;text-align:left;cursor:pointer;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.boxhead:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.boxtitle{display:flex;align-items:flex-start;gap:6px;min-width:0;font-weight:700;font-size:.82rem;line-height:1.35}
+.boxnum{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.45em;height:1.45em;border-radius:50%;
+background:var(--block-soft);color:var(--muted);border:1px solid var(--line);font-size:.72rem;font-variant-numeric:tabular-nums}
+.boxname{min-width:0;overflow-wrap:anywhere}
+.twisty{margin-left:auto;color:var(--muted);line-height:1;transform:rotate(-90deg)}
+.boxhead[aria-expanded=true] .twisty{transform:rotate(0)}
+.boxmeta{display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-width:0}
+.boxbody{grid-column:1 / -1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 4px}
+.boxbody[hidden]{display:none}
+.bundle-note{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.connector{grid-column:1 / -1;position:relative;height:28px;margin:-2px 0;pointer-events:none}
+.connector span{position:absolute;display:block}
+.connector .v1{left:var(--from);top:0;height:50%;border-left:2px solid var(--line)}
+.connector .h{left:var(--left);top:50%;width:var(--width);border-top:2px solid var(--line)}
+.connector .v2{left:var(--to);top:50%;height:50%;border-left:2px solid var(--line)}
+.connector .arrow{left:calc(var(--to) - 5px);bottom:0;width:0;height:0;border-left:5px solid transparent;
+border-right:5px solid transparent;border-top:6px solid var(--line)}
+.bkey{display:inline-flex;align-items:center;justify-content:center;min-width:2.35em;height:1.55em;border-radius:99px;
+background:var(--block-soft);color:var(--muted);border:1px solid var(--line);font-size:.66rem;padding:0 .45em;white-space:nowrap}
+.boxprog{font-size:.68rem;padding:1px 8px;border-radius:99px;background:var(--block-soft);color:var(--muted);
+white-space:nowrap;font-variant-numeric:tabular-nums}
+.reviewmark{font-size:.78rem;line-height:1}
+.bdetail{color:var(--muted);font-size:.8rem;margin:.2em 0 .6em;flex-basis:100%}
+.task{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--bg)}
+.task.done{opacity:.5}
+.taskhead{font-size:.9rem;overflow-wrap:anywhere}
+.taskhead b{font-weight:600}
+.owner{font-size:.68rem;padding:1px 8px;border-radius:99px;letter-spacing:.08em;white-space:nowrap}
+.owner.human{background:var(--human-soft);color:var(--human)}
+.owner.ai{background:var(--ai-soft);color:var(--ai)}
+.owner.joint{background:var(--warn-soft);color:var(--warn)}
+.tno{color:var(--muted);font-size:.8rem;text-decoration:none}
+.chip{font-size:.68rem;padding:1px 8px;border-radius:99px;background:var(--block-soft);color:var(--block);white-space:normal}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.okc{background:var(--ok-soft);color:var(--ok)}
+.chip.block a{color:var(--block)}
+.state{font-size:.68rem;padding:1px 8px;border-radius:99px;white-space:nowrap}
+.state.ready{background:var(--ok-soft);color:var(--ok)}
+.state.blocked{background:var(--block-soft);color:var(--block)}
+.state.done{background:var(--ok-soft);color:var(--ok)}
+.stepcount{font-size:.75rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.next{margin:.5em 0 .2em;font-size:.85rem;color:var(--muted)}
+.next::before{content:"▸ ";color:var(--muted)}
+.gate{font-size:.75rem;color:var(--warn);margin-top:.3em}
+.steps{margin-top:.4em;display:flex;flex-direction:column;gap:2px}
+.ck{display:flex;align-items:flex-start;gap:.6em;cursor:pointer;padding:.3em .4em;border-radius:6px;font-size:.88rem}
+.ck:hover{background:var(--block-soft)}
+.ck.sub{font-size:.84rem}
+.ck input{position:absolute;opacity:0;width:1px;height:1px}
+.ckbox{flex:none;width:1.15em;height:1.15em;margin-top:.22em;border:2px solid var(--muted);border-radius:4px;position:relative}
+.ck input:checked + .ckbox{background:var(--ok);border-color:var(--ok)}
+.ck input:checked + .ckbox::after{content:"";position:absolute;left:.28em;top:.05em;width:.3em;height:.6em;
+border:solid var(--bg);border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+.ck input:focus-visible + .ckbox{outline:2px solid var(--brand);outline-offset:2px}
+.ck input:disabled ~ .cktext{color:var(--muted)}
+.ck input:disabled + .ckbox{opacity:.45;cursor:not-allowed}
+.ck input:checked ~ .cktext{color:var(--muted)}
+.ck:not(.ssot-done) input:checked ~ .cktext{text-decoration:line-through;text-decoration-color:var(--muted)}
+.ck.ssot-done .cktext{text-decoration:line-through;text-decoration-color:var(--ok)}
+.ck.ssot-done input:disabled + .ckbox{opacity:1}
+details{font-size:.78rem;color:var(--muted);margin-top:.3em}
+details summary{cursor:pointer}
+details code{background:var(--block-soft);padding:0 .4em;border-radius:4px;font-size:.9em}
+details ul{margin:.3em 0 .2em;padding-left:1.4em}
+.timeline{display:flex;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.ms{flex:1;min-width:130px;padding:10px 12px;border-right:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+.ms:last-child{border-right:none}
+.msd{display:block;font-weight:700;font-size:.9rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+.syncbar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+padding:10px 16px;display:none;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap}
+.syncbar.show{display:flex}
+.syncbar .n{font-variant-numeric:tabular-nums;font-size:.85rem}
+.syncbar .n b{color:var(--brand)}
+.syncbar button{background:var(--brand);color:var(--bg);border:1px solid transparent;border-radius:999px;padding:8px 16px;
+font-size:.85rem;font-family:inherit;font-weight:700;cursor:pointer;box-shadow:0 4px 15px rgba(109,158,235,.3)}
+.syncbar button:hover{box-shadow:0 6px 20px rgba(109,158,235,.4)}
+.syncbar button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.syncbar .hint{font-size:.72rem;color:var(--muted)}
+.copied{color:var(--ok);font-size:.8rem}
+textarea.fallback{width:100%;max-width:640px;height:7em;font-size:.8rem;margin-top:6px}
+@media (prefers-reduced-motion: no-preference){
+.ckbox{transition:background .12s,border-color .12s}
+.quickchip,.syncbar button{transition:background .16s,box-shadow .16s,transform .16s}
+.quickchip:hover,.syncbar button:hover{transform:translateY(-2px)}
+.flowbox{transition:opacity .12s,box-shadow .18s,transform .18s}
+.flowbox:has(.boxhead:hover){transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.12)}
+.twisty{transition:transform .12s}
+}
+</style>
+<main>
+<div class="head"><h1>サンプル作戦盤</h1><span class="stamp">生成 2026-08-20 00:00 ／ 状態の正本は examples/state.json</span></div>
+<div class="counts"><div class="count urgent"><b>12日</b><span>納品期限 まで</span></div><div class="count"><b>0/5</b><span>完了 / 全タスク</span></div></div>
+<div class="legend"><span><span class="dot" style="background:var(--human-accent)"></span>青 = 人間の実行</span><span><span class="dot" style="background:var(--ai-accent)"></span>灰 = AIの実行</span><span>☑ = この端末のチェック（正本反映は下の「報告をコピー」→AIへ）</span><span>箱をタップすると中のタスクが開く</span></div>
+<h2>今すぐ<span class="sub">依存が満了した人間タスク</span></h2>
+<div class="quickstrip"><a class="quickchip" href="#box-report-r1" data-open-box="box-report-r1">束A データ収集</a></div>
+<section class="stream" id="stream-report"><h2>月次レポート</h2><div class="flowgrid" style="--lanes:4"><div class="lanehead lane-human">操作者A（人間）</div><div class="lanehead lane-ai">AのAI</div><div class="lanehead lane-ai">BのAI</div><div class="lanehead lane-joint">A+B（合意）</div><div class="lanecell lane-human"><article class="flowbox human ready" id="box-report-r1" data-box="box-report-r1"><button class="boxhead" type="button" aria-expanded="false" aria-controls="boxbody-report-r1"><span class="boxtitle"><span class="boxnum">1</span><span class="boxname">データ収集</span><span class="twisty" aria-hidden="true">▾</span></span><span class="boxmeta"><span class="owner human">人間</span><span class="state ready">着手可</span><span class="bkey">束A</span><span class="boxprog" data-boxprog="boxbody-report-r1" data-task-done="0" data-task-total="2">☑ 0/3</span></span></button></article></div><div class="lanecell lane-ai"></div><div class="lanecell lane-ai"></div><div class="lanecell lane-joint"></div><div class="boxbody" id="boxbody-report-r1" hidden><div class="bundle-note"><span class="chip goal">業務システムにログインできる時間帯ならいつでも</span></div><div class="task human ready" data-task="1"><div class="taskhead"><span class="owner human">人間</span> <b>売上CSVの取得</b> <span class="tno">#1</span> <span class="stepcount" data-count="1"></span></div><p class="next">業務システムを開いたら先月分の売上CSVをエクスポートし data/ に保存する</p><div class="steps"><label class="ck sub"><input type="checkbox" data-ck="1.s1"><span class="ckbox" aria-hidden="true"></span><span class="cktext">売上CSV（先月分）をエクスポートして data/ に保存</span></label><label class="ck sub"><input type="checkbox" data-ck="1.s2"><span class="ckbox" aria-hidden="true"></span><span class="cktext">行数と合計金額をタスク #1 にコメント（またはAIに伝える）</span></label></div><details><summary>完了の条件（クローズの基準）</summary><ul><li>CSVが data/ に存在し、行数・合計がタスク #1 に記録されている <code>ls data/sales-*.csv</code></li></ul></details></div><div class="task human ready" data-task="2"><div class="taskhead"><label class="ck"><input type="checkbox" data-ck="2"><span class="ckbox" aria-hidden="true"></span><span class="cktext"><span class="owner human">人間</span> <b>経費CSVの取得</b> <span class="tno">#2</span></span></label></div><p class="next">経費精算システムから同月の経費CSVをエクスポートし data/ に保存する</p><details><summary>完了の条件（クローズの基準）</summary><ul><li>CSVが data/ に存在する <code>ls data/expenses-*.csv</code></li></ul></details></div></div><div class="connector" aria-hidden="true" style="--from:12.5000%;--to:37.5000%;--left:12.5000%;--width:25.0000%"><span class="v1"></span><span class="h"></span><span class="v2"></span><span class="arrow"></span></div><div class="lanecell lane-human"></div><div class="lanecell lane-ai"><article class="flowbox ai blocked" id="box-report-r2" data-box="box-report-r2"><button class="boxhead" type="button" aria-expanded="false" aria-controls="boxbody-report-r2"><span class="boxtitle"><span class="boxnum">2</span><span class="boxname">突合・サマリ生成</span><span class="twisty" aria-hidden="true">▾</span></span><span class="boxmeta"><span class="owner ai">AI</span><span class="state blocked">待ち</span><span class="chip block">待ち: #1 #2</span><span class="boxprog" data-boxprog="boxbody-report-r2" data-task-done="0" data-task-total="1">0/1</span></span></button></article></div><div class="lanecell lane-ai"></div><div class="lanecell lane-joint"></div><div class="boxbody" id="boxbody-report-r2" hidden><div class="task ai blocked" data-task="3"><div class="taskhead"><span class="owner ai">AI</span> <b>突合と月次サマリ生成</b> <span class="tno">#3</span> <span class="state blocked">待ち</span> <span class="chip block">待ち: #1 #2</span></div><p class="next">#1 #2 のCSVを突合して月次サマリを生成し、結果をタスク #3 に記録する</p><details><summary>完了の条件（クローズの基準）</summary><ul><li>月次サマリが output/ に生成され、タスク #3 に記録されている <code>ls output/monthly-summary.md</code></li></ul></details></div></div><div class="connector" aria-hidden="true" style="--from:37.5000%;--to:62.5000%;--left:37.5000%;--width:25.0000%"><span class="v1"></span><span class="h"></span><span class="v2"></span><span class="arrow"></span></div><div class="lanecell lane-human"></div><div class="lanecell lane-ai"></div><div class="lanecell lane-ai"><article class="flowbox ai blocked" id="box-report-r3" data-box="box-report-r3"><button class="boxhead" type="button" aria-expanded="false" aria-controls="boxbody-report-r3"><span class="boxtitle"><span class="boxnum">3</span><span class="boxname">独立検算</span><span class="twisty" aria-hidden="true">▾</span></span><span class="boxmeta"><span class="owner ai">AI</span><span class="state blocked">待ち</span><span class="chip block">待ち: #3</span><span class="reviewmark" aria-label="review gate">🔍</span><span class="boxprog" data-boxprog="boxbody-report-r3" data-task-done="0" data-task-total="1">0/1</span></span></button></article></div><div class="lanecell lane-joint"></div><div class="boxbody" id="boxbody-report-r3" hidden><div class="task ai blocked" data-task="4"><div class="taskhead"><span class="owner ai">AI</span> <b>独立検算</b> <span class="tno">#4</span> <span class="state blocked">待ち</span> <span class="chip block">待ち: #3</span></div><p class="next">#3 のサマリを独立に検算し、差異があればタスク #4 に指摘を記録する</p><div class="gate">🔍 独立検算: assistant-a の中間生成物を参照せず元CSVから導出する</div><details><summary>完了の条件（クローズの基準）</summary><ul><li>検算結果（一致 or 差異一覧）がタスク #4 に記録されている</li></ul></details></div></div><div class="connector" aria-hidden="true" style="--from:62.5000%;--to:87.5000%;--left:62.5000%;--width:25.0000%"><span class="v1"></span><span class="h"></span><span class="v2"></span><span class="arrow"></span></div><div class="lanecell lane-human"></div><div class="lanecell lane-ai"></div><div class="lanecell lane-ai"></div><div class="lanecell lane-joint"><article class="flowbox joint blocked" id="box-report-r4" data-box="box-report-r4"><button class="boxhead" type="button" aria-expanded="false" aria-controls="boxbody-report-r4"><span class="boxtitle"><span class="boxnum">4</span><span class="boxname">確認・合意・納品</span><span class="twisty" aria-hidden="true">▾</span></span><span class="boxmeta"><span class="owner joint">人間+相手</span><span class="state blocked">待ち</span><span class="chip block">待ち: #4</span><span class="boxprog" data-boxprog="boxbody-report-r4" data-task-done="0" data-task-total="1">☑ 0/1</span></span></button></article></div><div class="boxbody" id="boxbody-report-r4" hidden><div class="task joint blocked" data-task="5"><div class="taskhead"><label class="ck"><input type="checkbox" data-ck="5" disabled><span class="ckbox" aria-hidden="true"></span><span class="cktext"><span class="owner joint">人間+相手</span> <b>確認・合意・納品</b> <span class="tno">#5</span> <span class="chip block">待ち: #4</span></span></label></div><p class="next">検算結果を2人で確認し、OKならタスク #5 をクローズして納品する</p><details><summary>完了の条件（クローズの基準）</summary><ul><li>合意の記録があり、納品物が送付済みである</li></ul></details></div></div></div></section>
+<h2>タイムライン</h2><div class="timeline"><div class="ms"><span class="msd">day1</span><span>データ収集 (束A)</span></div><div class="ms"><span class="msd">day2</span><span>AI集計→相互レビュー</span></div><div class="ms"><span class="msd">day3</span><span>合意→納品</span></div></div>
+<div class="foot">運用: チェック→下部バーで「報告をコピー」→AIに貼る→AIが検証し正本へ反映→本盤を再生成（チェックは端末ローカル、完了の正本は状態SSoT）。このHTMLは生成物であり手編集禁止。</div>
+<div class="syncbar" id="syncbar"><span class="n">未報告のチェック <b id="pn">0</b> 件</span><button id="copybtn" type="button">AIへ報告をコピー</button><span class="copied" id="copied"></span><textarea class="fallback" id="fallback" style="display:none" readonly></textarea><span class="hint">貼り先: チャット or 該当issueコメント</span></div>
+<script>(function(){
+  var KEY='sakusenban-example-v1';
+  var REPORT_HEAD='[サンプル作戦盤チェック報告 v1] ';
+  var store={};
+  try{store=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){store={}}
+  var boxes=Array.prototype.slice.call(document.querySelectorAll('input[data-ck]'));
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}}
+  function pending(){
+    return boxes.filter(function(b){return b.checked&&!b.disabled});
+  }
+  function setBox(btn, open){
+    var body=document.getElementById(btn.getAttribute('aria-controls'));
+    btn.setAttribute('aria-expanded',open?'true':'false');
+    if(body)body.hidden=!open;
+    var box=btn.closest('.flowbox');
+    if(box)box.classList.toggle('expanded',open);
+  }
+  function updateCounts(){
+    document.querySelectorAll('[data-count]').forEach(function(el){
+      var n=el.getAttribute('data-count');
+      var subs=boxes.filter(function(b){return b.getAttribute('data-ck').indexOf(n+'.')===0});
+      var done=subs.filter(function(b){return b.checked}).length;
+      el.textContent=done+'/'+subs.length;
+    });
+    document.querySelectorAll('[data-boxprog]').forEach(function(el){
+      var body=document.getElementById(el.getAttribute('data-boxprog'));
+      var all=body?Array.prototype.slice.call(body.querySelectorAll('input[data-ck]')):[];
+      if(all.length){
+        var done=all.filter(function(b){return b.checked}).length;
+        el.textContent='☑ '+done+'/'+all.length;
+        var box=el.closest('.flowbox');
+        if(box)box.classList.toggle('alldone',done===all.length);
+      }else{
+        el.textContent=(el.getAttribute('data-task-done')||'0')+'/'+(el.getAttribute('data-task-total')||'0');
+      }
+    });
+    var p=pending().length;
+    var bar=document.getElementById('syncbar');
+    document.getElementById('pn').textContent=p;
+    bar.classList.toggle('show',p>0);
+  }
+  boxes.forEach(function(b){
+    var id=b.getAttribute('data-ck');
+    if(!b.disabled&&store[id])b.checked=true;
+    b.addEventListener('change',function(){
+      if(b.checked)store[id]=new Date().toISOString();else delete store[id];
+      save();updateCounts();
+    });
+  });
+  document.querySelectorAll('.boxhead').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      setBox(btn,btn.getAttribute('aria-expanded')!=='true');
+    });
+    setBox(btn,btn.getAttribute('aria-expanded')==='true');
+  });
+  document.querySelectorAll('[data-open-box]').forEach(function(a){
+    a.addEventListener('click',function(ev){
+      ev.preventDefault();
+      var target=document.getElementById(a.getAttribute('data-open-box'));
+      if(!target)return;
+      var btn=target.querySelector('.boxhead');
+      if(btn)setBox(btn,true);
+      var smooth=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+      target.scrollIntoView({behavior:smooth?'smooth':'auto',block:'start'});
+    });
+  });
+  function report(){
+    var ids=pending().map(function(b){return b.getAttribute('data-ck')});
+    var by={};
+    ids.forEach(function(id){
+      var head=id.split('.')[0];
+      (by[head]=by[head]||[]).push(id.indexOf('.')>-1?id.split('.').slice(1).join('.'):'完了');
+    });
+    var lines=[REPORT_HEAD+new Date().toISOString()];
+    Object.keys(by).forEach(function(h){
+      var label=/^\d+$/.test(h)?'#'+h:h;
+      lines.push(label+': '+by[h].join(', '));
+    });
+    lines.push('(このままClaudeに貼ってください。issue反映と作戦盤の再生成を行います)');
+    return lines.join('\n');
+  }
+  document.getElementById('copybtn').addEventListener('click',function(){
+    var txt=report();
+    var done=function(){
+      document.getElementById('copied').textContent='コピーしました — Claudeのチャットに貼ってください';
+    };
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done,function(){fallback(txt)});
+    }else{fallback(txt)}
+    function fallback(t){
+      var ta=document.getElementById('fallback');
+      ta.style.display='block';ta.value=t;ta.select();
+      document.getElementById('copied').textContent='下のテキストを選択してコピーしてください';
+    }
+  });
+  updateCounts();
+})();
+</script></main>

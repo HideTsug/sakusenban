@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/HideTsug/sakusenban/main/schema/sakusenban.schema.json",
+  "title": "sakusenban board manifest",
+  "description": "作戦盤の構造マニフェスト。状態(open/closed)はここに書かず、state.json(GitHub Issues 等のSSoT)だけが持つ。",
+  "type": "object",
+  "required": ["meta", "tasks", "flow"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["title", "key"],
+      "properties": {
+        "version": {"type": "integer"},
+        "title": {"type": "string", "description": "盤のタイトル（h1・<title>）"},
+        "key": {"type": "string", "description": "localStorage キー。盤ごとに一意（例: myproject-board-v1）"},
+        "repo": {"type": "string", "description": "owner/name。指定時は #N が GitHub issue リンクになる"},
+        "issue_url_base": {"type": "string", "description": "repo を使わない場合のタスクリンク先接頭辞（末尾に番号が付く）"},
+        "board_url": {"type": "string", "description": "GitHub Projects 等の補助ボード URL（任意）"},
+        "state_note": {"type": "string", "description": "repo も board_url もない場合にヘッダへ出す正本の説明"},
+        "goal_field": {"type": "string", "description": "fields.json から目標日を読むフィールド名（既定: 目標日）"},
+        "report_head": {"type": "string", "description": "チェック報告の先頭行（既定: [<title>チェック報告 v1] ）"},
+        "foot_note": {"type": "string", "description": "フッタに追記する構造・規約ファイルへのポインタ"},
+        "deadlines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "date"],
+            "properties": {
+              "label": {"type": "string"},
+              "date": {"type": "string", "format": "date"},
+              "urgent": {"type": "boolean", "description": "true で残日数を赤表示"}
+            }
+          }
+        },
+        "milestones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["when", "label"],
+            "properties": {"when": {"type": "string"}, "label": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "bundles": {
+      "type": "object",
+      "description": "人間キュー: 同質作業の束（例: ブラウザ作業30分・外出1回）。キーは短い識別子（A, B, ...）",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "items"],
+        "properties": {
+          "name": {"type": "string"},
+          "owner": {"type": "string"},
+          "window": {"type": "string", "description": "実施可能な時間帯・条件の説明"},
+          "deadline": {"type": "string", "format": "date"},
+          "detail": {"type": "string"},
+          "items": {"type": "array", "items": {"type": "integer"}},
+          "after_issues": {"type": "array", "items": {"type": "integer"}, "description": "束の解放条件（これらが全て CLOSED になったら着手可）"},
+          "extra_items": {
+            "type": "array",
+            "description": "issue を切るほどでない小作業。チェック id は <束キー>.<key>",
+            "items": {
+              "type": "object",
+              "required": ["key", "action"],
+              "properties": {"key": {"type": "string"}, "action": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner"],
+        "properties": {
+          "id": {"type": "integer", "description": "state.json の number と一致させる（GitHub なら issue 番号）"},
+          "owner": {"type": "string", "pattern": "^(human|ai|joint):", "description": "実行主体。human:<名前> / ai:<名前> / joint:<名前>"},
+          "owner_label": {"type": "string", "description": "owner チップの表示名を上書き（既定: 人間/AI/人間+相手）"},
+          "bundle": {"type": "string"},
+          "next_action": {"type": "string", "description": "開いた瞬間に動ける「最初にやること」1行"},
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "text"],
+              "properties": {"key": {"type": "string"}, "text": {"type": "string"}}
+            }
+          },
+          "accepts": {
+            "type": "array",
+            "description": "完了の条件。verify は機械検証コマンド",
+            "items": {
+              "type": "object",
+              "required": ["text"],
+              "properties": {"text": {"type": "string"}, "verify": {"type": "string"}}
+            }
+          },
+          "deps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id"],
+              "properties": {"id": {"type": "integer"}, "note": {"type": "string"}}
+            }
+          },
+          "review_gate": {"type": "string", "description": "クローズ前に必要なレビューの説明"},
+          "unblocks_note": {"type": "string"}
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "required": ["lanes", "streams"],
+      "properties": {
+        "lanes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["key", "label", "kind"],
+            "properties": {
+              "key": {"type": "string"},
+              "label": {"type": "string"},
+              "kind": {"enum": ["human", "ai", "joint"], "description": "配色の意味: human=青 / ai=灰 / joint=橙"},
+              "owner_label": {"type": "string", "description": "このレーンの箱の owner チップ表示名"}
+            }
+          }
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "name", "boxes"],
+            "properties": {
+              "key": {"type": "string"},
+              "name": {"type": "string"},
+              "boxes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["key", "lane", "name"],
+                  "properties": {
+                    "key": {"type": "string"},
+                    "lane": {"type": "string"},
+                    "name": {"type": "string"},
+                    "tasks": {"type": "array", "items": {"type": "integer"}},
+                    "bundle": {"type": "string"},
+                    "include_bundle_extras": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

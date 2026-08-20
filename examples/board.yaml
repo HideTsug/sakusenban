@@ -1,0 +1,83 @@
+# sakusenban example — 汎用サンプル: 人間2人 + 各自のAI でデータ検証レポートを仕上げる架空の段取り
+# 状態(open/closed)はここに書かない。examples/state.json（= GitHub Issues の代替となるローカルSSoT）が持つ。
+meta:
+  version: 1
+  title: "サンプル作戦盤"
+  key: "sakusenban-example-v1"
+  # repo: owner/name を指定すると #N が GitHub issue リンクになる。ここではローカルSSoTモード。
+  state_note: "examples/state.json"
+  deadlines:
+    - {label: "納品期限 まで", date: "2026-09-01", urgent: true}
+  milestones:
+    - {when: "day1", label: "データ収集 (束A)"}
+    - {when: "day2", label: "AI集計→相互レビュー"}
+    - {when: "day3", label: "合意→納品"}
+
+bundles:
+  A:
+    name: ブラウザ作業15分
+    owner: operator-a
+    window: "業務システムにログインできる時間帯ならいつでも"
+    items: [1, 2]
+
+tasks:
+  - id: 1
+    owner: human:operator-a
+    bundle: A
+    next_action: "業務システムを開いたら先月分の売上CSVをエクスポートし data/ に保存する"
+    steps:
+      - {key: s1, text: "売上CSV（先月分）をエクスポートして data/ に保存"}
+      - {key: s2, text: "行数と合計金額をタスク #1 にコメント（またはAIに伝える）"}
+    accepts:
+      - text: "CSVが data/ に存在し、行数・合計がタスク #1 に記録されている"
+        verify: "ls data/sales-*.csv"
+
+  - id: 2
+    owner: human:operator-a
+    bundle: A
+    next_action: "経費精算システムから同月の経費CSVをエクスポートし data/ に保存する"
+    accepts:
+      - text: "CSVが data/ に存在する"
+        verify: "ls data/expenses-*.csv"
+
+  - id: 3
+    owner: ai:assistant-a
+    next_action: "#1 #2 のCSVを突合して月次サマリを生成し、結果をタスク #3 に記録する"
+    deps:
+      - {id: 1}
+      - {id: 2}
+    accepts:
+      - text: "月次サマリが output/ に生成され、タスク #3 に記録されている"
+        verify: "ls output/monthly-summary.md"
+
+  - id: 4
+    owner: ai:assistant-b
+    next_action: "#3 のサマリを独立に検算し、差異があればタスク #4 に指摘を記録する"
+    deps:
+      - {id: 3}
+    review_gate: "独立検算: assistant-a の中間生成物を参照せず元CSVから導出する"
+    accepts:
+      - text: "検算結果（一致 or 差異一覧）がタスク #4 に記録されている"
+
+  - id: 5
+    owner: joint:both
+    next_action: "検算結果を2人で確認し、OKならタスク #5 をクローズして納品する"
+    deps:
+      - {id: 4}
+    accepts:
+      - text: "合意の記録があり、納品物が送付済みである"
+
+flow:
+  lanes:
+    - {key: op-a, label: "操作者A（人間）", kind: human}
+    - {key: ai-a, label: "AのAI", kind: ai}
+    - {key: ai-b, label: "BのAI", kind: ai}
+    - {key: both, label: "A+B（合意）", kind: joint}
+  streams:
+    - key: report
+      name: "月次レポート"
+      boxes:
+        - {key: r1, lane: op-a, name: "データ収集", tasks: [1, 2], bundle: A}
+        - {key: r2, lane: ai-a, name: "突合・サマリ生成", tasks: [3]}
+        - {key: r3, lane: ai-b, name: "独立検算", tasks: [4]}
+        - {key: r4, lane: both, name: "確認・合意・納品", tasks: [5]}
