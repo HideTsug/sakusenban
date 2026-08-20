@@ -34,7 +34,20 @@ audience: ai
 - **束（bundle）** = 人間キュー。同質作業（ブラウザ作業・外出・署名会）をまとめ、1回の腰上げで消化できる単位にする
 - **状態は書かない**。ready/blocked/done は renderer が state.json と deps から導出する
 
-### 3. 生成（2経路）
+### 3. 出口を先に決める（骨格の有無が変わる）
+
+盤の出口は2つあり、**必要な HTML の形が違う**。生成の前にどちらか決めること。
+
+| 出口 | 必要な形 | renderer の指定 |
+|---|---|---|
+| **file:// / ローカル配信 / 添付** | 完全な文書骨格（`<!doctype html>` / `<html lang>` / `<head>` / `<meta charset>` / `<body>`） | 既定（オプションなし） |
+| **Artifact 公開** | 骨格なしの断片（`<title>` 以降のみ） | `--fragment` |
+
+Artifact は公開時にファイルを `<!doctype html>…<head>…</head><body>` でラップするため、投入するファイル側に doctype / html / head / body を書くと**入れ子の不正な文書**になる。charset もホスト側の head が供給するので断片側には不要。
+
+逆に file:// で開く盤に骨格がないと、`<meta charset>` がないため日本語が文字化けする。骨格ありの盤では charset を先頭 1024 バイト以内に置く必要がある（HTML 仕様のエンコーディング宣言の制限）。renderer は既定でこれを満たす。
+
+### 4. 生成（2経路）
 
 **経路A: renderer（推奨・構造化されたプロジェクト向け）**
 
@@ -43,12 +56,17 @@ audience: ai
 # 状態: GitHub Issues なら
 gh issue list --state all -L 200 --json number,title,state > state.json
 # GitHub を使わないなら state.json を手で維持（同じ形式）
+
+# file:// / ローカル配信向け（完全な文書骨格つき）
 python3 scripts/render.py board.yaml state.json > board.html
+
+# Artifact 公開向け（骨格なし断片）
+python3 scripts/render.py board.yaml state.json --fragment > board-artifact.html
 ```
 
 **経路B: 手書き（1回きりのセッション盤向け）**
 
-`templates/template.html` を**別名にコピーしてから**、そのコピーの CSS/JS 機構をそのまま流用してコンテンツを差し替える（`templates/template.html` 自体は renderer の生成物で `scripts/check.sh` が鮮度を検証しているため、直接編集しない）。変更必須: `<title>` / h1 / JS の `KEY`（盤ごと一意）と `REPORT_HEAD`。connector の百分率: レーン i（0始まり）の中心 = `(i+0.5)/レーン数*100`
+見本を**別名にコピーしてから**、そのコピーの CSS/JS 機構をそのまま流用してコンテンツを差し替える（`templates/` 配下は renderer の生成物で `scripts/check.sh` が鮮度を検証しているため、直接編集しない）。コピー元は出口で選ぶ: **Artifact 公開なら `templates/fragment.html`**（骨格なし）、**file:// / ローカル配信なら `templates/template.html`**（骨格あり）。ここを間違えると、Artifact では骨格が入れ子になり、file:// では文字化けする。変更必須: `<title>` / h1 / JS の `KEY`（盤ごと一意）と `REPORT_HEAD`。connector の百分率: レーン i（0始まり）の中心 = `(i+0.5)/レーン数*100`
 
 手書き経路での注意（renderer 経路では自動的に守られる）:
 
@@ -57,11 +75,11 @@ python3 scripts/render.py board.yaml state.json > board.html
 - **正本で完了を確認済みのステップ**は、input に `checked disabled` を付けたうえで、その `label.ck` に `.ssot-done` を付ける（緑チェック＋緑の取り消し線）。`.ssot-done` を落とすと通常の減光表示になり、「端末ローカルでチェックしただけ」と「正本で確認済み」が見分けられなくなる
 - **blocked 手順への `disabled` は盤の寿命で使い分ける** — 数日〜数週間スパンの盤は付ける（未着手タスクの誤チェック防止）／一座の同席セッション盤は付けない（依存が順に消化される前提で、盤を再生成せずライブで打鍵する方が価値が高い）
 
-### 4. 配色規範（重要・逸脱禁止）
+### 5. 配色規範（重要・逸脱禁止）
 
 色は**意味にのみ**付与する: 青=人間の実行 / 橙=共同・注意 / 緑=着手可・OK / 赤=期限切迫 / グレーアウト=完了 / アクセント1色（--brand）=押せる操作のみ。レーン背景・番号バッジ・装飾への色付与は禁止。新しい色を足すのは新しい「意味」ができた時だけ。
 
-### 5. チェック報告の受け方（AI側プロトコル）
+### 6. チェック報告の受け方（AI側プロトコル）
 
 利用者が `[<盤名>チェック報告 v1]` を貼ってきたら:
 

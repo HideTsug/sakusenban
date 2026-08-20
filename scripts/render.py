@@ -17,6 +17,7 @@ options:
   --today YYYY-MM-DD          reference date for countdowns (default: today)
   --assets DIR                directory containing style.css / board.js
                               (default: <repo>/assets next to this script)
+  --fragment                  output an Artifact-ready fragment without document scaffolding
 
 Design (unchanged from the battle-tested originals):
 - State SSoT is external (Issues or a local state file). CLOSED tasks render locked ("done").
@@ -474,7 +475,7 @@ class Board:
         return f'<a class="quickchip" href="#{esc(bid)}" data-open-box="{esc(bid)}">{esc(prefix + box["name"])}</a>'
 
     # --- page ----------------------------------------------------------
-    def render(self, css, js):
+    def render(self, css, js, fragment=False):
         meta = self.meta
         title = meta["title"]
         flow_task_ids = {n for s in self.flow["streams"] for b in s["boxes"] for n in b.get("tasks", [])}
@@ -525,17 +526,23 @@ class Board:
         js = js.replace("'__BOARD_KEY__'", script_safe_json(meta["key"]))
         js = js.replace("'__REPORT_HEAD__'", script_safe_json(report_head))
 
-        parts = ['<!doctype html>',
-                 '<html lang="ja">',
-                 '<head>',
-                 '<meta charset="utf-8">',
-                 '<meta name="viewport" content="width=device-width, initial-scale=1">',
-                 f'<title>{esc(title)}</title>',
-                 LICENSE_COMMENT,
-                 f'<style>{css}</style>',
-                 '</head>',
-                 '<body>',
-                 '<main>']
+        if fragment:
+            parts = [LICENSE_COMMENT,
+                     f'<title>{esc(title)}</title>',
+                     f'<style>{css}</style>',
+                     '<main>']
+        else:
+            parts = ['<!doctype html>',
+                     '<html lang="ja">',
+                     '<head>',
+                     '<meta charset="utf-8">',
+                     '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                     f'<title>{esc(title)}</title>',
+                     LICENSE_COMMENT,
+                     f'<style>{css}</style>',
+                     '</head>',
+                     '<body>',
+                     '<main>']
         parts.append(f'<div class="head"><h1>{esc(title)}</h1>{stamp_html}</div>')
         parts.append('<div class="counts">' + "".join(counts) + '</div>')
         parts.append(legend)
@@ -557,8 +564,9 @@ class Board:
             '<textarea class="fallback" id="fallback" style="display:none" readonly></textarea>'
             '<span class="hint">貼り先: チャット or 該当issueコメント</span></div>')
         parts.append(f'<script>{js}</script></main>')
-        parts.append('</body>')
-        parts.append('</html>')
+        if not fragment:
+            parts.append('</body>')
+            parts.append('</html>')
         return "\n".join(parts)
 
 
@@ -570,6 +578,7 @@ def main(argv=None):
     ap.add_argument("--stamp")
     ap.add_argument("--today")
     ap.add_argument("--assets")
+    ap.add_argument("--fragment", action="store_true")
     args = ap.parse_args(argv)
 
     manifest = load_manifest(pathlib.Path(args.manifest))
@@ -595,7 +604,7 @@ def main(argv=None):
     js = (assets / "board.js").read_text(encoding="utf-8")
 
     board = Board(manifest, state_rows, fields, today, stamp)
-    print(board.render(css, js))
+    print(board.render(css, js, fragment=args.fragment))
     return 0
 
 

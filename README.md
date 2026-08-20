@@ -24,6 +24,9 @@ gh issue list --state all -L 200 --json number,title,state > state.json
 #    GitHub を使わない場合は同じ形式の JSON を手で維持すればよい（examples/state.json 参照）
 # 3. 生成
 python3 scripts/render.py board.yaml state.json > board.html
+
+# Artifact 公開用（骨格なし断片）
+python3 scripts/render.py board.yaml state.json --fragment > board-artifact.html
 ```
 
 依存: Python 3（YAML マニフェストを使う場合のみ `pip install pyyaml`。JSON マニフェストなら標準ライブラリのみ）。
@@ -43,10 +46,11 @@ python3 scripts/render.py board.yaml state.json > board.html
 | `scripts/render.py` | レンダラ（board.yaml + state.json → 自己完結HTML） |
 | `schema/sakusenban.schema.json` | 構造マニフェストのスキーマ |
 | `assets/style.css` / `assets/board.js` | 盤の機構（CSS/JS の唯一の正本） |
-| `templates/template.html` | 生成サンプル（= examples を render した出力。手書き流用の見本） |
+| `templates/template.html` | 生成サンプル — file:// / ローカル配信用（完全な文書骨格つき） |
+| `templates/fragment.html` | 生成サンプル — Artifact 公開用（骨格なし断片） |
 | `docs/authoring-guide.md` | AI向けオーサリングガイド（設計思想・配色規範・報告プロトコル） |
 | `examples/` | 汎用サンプル（人間2人+AI2体の月次レポート段取り） |
-| `scripts/check.sh` | 機械検証ゲート（render 成功・template 鮮度・プレースホルダ） |
+| `scripts/check.sh` | 機械検証ゲート（render 成功・両テンプレートの鮮度・出力モード・プレースホルダ） |
 
 ## ライセンス
 
