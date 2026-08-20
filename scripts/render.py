@@ -35,6 +35,28 @@ import sys
 OWNER_LABEL = {"ai": "AI", "human": "人間", "joint": "人間+相手"}
 STATE_LABEL = {"done": "完了", "ready": "着手可", "blocked": "待ち"}
 LANE_KINDS = ("human", "ai", "joint")
+MIT_LICENSE = """MIT License
+
+Copyright (c) 2026 Hideyuki Tsuganezawa (HideTsug)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+LICENSE_COMMENT = f"<!--\n{MIT_LICENSE}\n-->"
 
 
 def fail(msg):
@@ -59,6 +81,14 @@ def esc(s):
     return html.escape(str(s), quote=True)
 
 
+def script_safe_json(value):
+    return json.dumps(value).replace("<", r"\u003c")
+
+
+def is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def validate(manifest):
     """Mechanical invariant checks. Returns a list of error strings."""
     errors = []
@@ -66,6 +96,10 @@ def validate(manifest):
     for key in ("title", "key"):
         if not meta.get(key):
             errors.append(f"meta.{key} is required")
+    for key in ("issue_url_base", "board_url"):
+        if key in meta and (not isinstance(meta[key], str)
+                            or not meta[key].startswith(("http://", "https://"))):
+            errors.append(f"meta.{key} must start with http:// or https://")
     flow = manifest.get("flow") or {}
     lanes = flow.get("lanes") or []
     if not lanes:
@@ -76,28 +110,44 @@ def validate(manifest):
             errors.append(f'lane {lane.get("key")}: kind must be one of {LANE_KINDS}')
         lane_keys.add(lane.get("key"))
     tasks = manifest.get("tasks") or []
-    task_ids = [t.get("id") for t in tasks]
+    task_ids = []
+    for task_index, task in enumerate(tasks):
+        task_id = task.get("id")
+        if is_int(task_id):
+            task_ids.append(task_id)
+        else:
+            errors.append(f"tasks[{task_index}].id must be an int")
     dupes = {i for i in task_ids if task_ids.count(i) > 1}
     if dupes:
         errors.append(f"duplicate task id(s): {sorted(dupes)}")
     id_set = set(task_ids)
-    for t in tasks:
-        for d in t.get("deps", []):
-            if d.get("id") not in id_set:
-                errors.append(f'task {t.get("id")}: dep references unknown task {d.get("id")}')
+    for task_index, task in enumerate(tasks):
+        for dep_index, dep in enumerate(task.get("deps", []) or []):
+            dep_id = dep.get("id")
+            if not is_int(dep_id):
+                errors.append(f"tasks[{task_index}].deps[{dep_index}].id must be an int")
+            elif dep_id not in id_set:
+                errors.append(f'task {task.get("id")}: dep references unknown task {dep_id}')
     bundles = manifest.get("bundles") or {}
     for bkey, b in bundles.items():
-        for i in b.get("items", []) + b.get("after_issues", []):
-            if i not in id_set:
-                errors.append(f"bundle {bkey}: references unknown task {i}")
-    for stream in flow.get("streams", []):
-        for box in stream.get("boxes", []):
+        for field in ("items", "after_issues"):
+            for item_index, item in enumerate(b.get(field, []) or []):
+                if not is_int(item):
+                    errors.append(f"bundles.{bkey}.{field}[{item_index}] must be an int")
+                elif item not in id_set:
+                    errors.append(f"bundle {bkey}: references unknown task {item}")
+    for stream_index, stream in enumerate(flow.get("streams", [])):
+        for box_index, box in enumerate(stream.get("boxes", [])):
             where = f'{stream.get("key")}.{box.get("key")}'
             if box.get("lane") not in lane_keys:
                 errors.append(f'{where}: unknown lane {box.get("lane")}')
-            for n in box.get("tasks", []):
-                if n not in id_set:
-                    errors.append(f"{where}: references unknown task {n}")
+            for task_index, task_id in enumerate(box.get("tasks", []) or []):
+                if not is_int(task_id):
+                    errors.append(
+                        f"flow.streams[{stream_index}].boxes[{box_index}].tasks[{task_index}] "
+                        "must be an int")
+                elif task_id not in id_set:
+                    errors.append(f"{where}: references unknown task {task_id}")
             bkey = box.get("bundle")
             if bkey and bkey not in bundles:
                 errors.append(f"{where}: unknown bundle {bkey}")
@@ -472,9 +522,11 @@ class Board:
 
         foot_extra = f'（{esc(meta["foot_note"])}）' if meta.get("foot_note") else ""
         report_head = meta.get("report_head", f'[{title}チェック報告 v1] ')
-        js = js.replace("__BOARD_KEY__", meta["key"]).replace("__REPORT_HEAD__", report_head)
+        js = js.replace("'__BOARD_KEY__'", script_safe_json(meta["key"]))
+        js = js.replace("'__REPORT_HEAD__'", script_safe_json(report_head))
 
-        parts = [f'<meta charset="utf-8">\n<title>{esc(title)}</title>\n<style>{css}</style>\n<main>']
+        parts = [LICENSE_COMMENT,
+                 f'<meta charset="utf-8">\n<title>{esc(title)}</title>\n<style>{css}</style>\n<main>']
         parts.append(f'<div class="head"><h1>{esc(title)}</h1>{stamp_html}</div>')
         parts.append('<div class="counts">' + "".join(counts) + '</div>')
         parts.append(legend)
