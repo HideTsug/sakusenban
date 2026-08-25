@@ -12,6 +12,7 @@
       "properties": {
         "version": {"type": "integer"},
         "title": {"type": "string", "description": "盤のタイトル（h1・<title>）"},
+        "subtitle": {"type": "string", "description": "ヘッダのスタンプ先頭に出す補足（対象期間・スコープ等）。任意"},
         "key": {"type": "string", "description": "localStorage キー。盤ごとに一意（例: myproject-board-v1）"},
         "repo": {"type": "string", "description": "owner/name。指定時は #N が GitHub issue リンクになる"},
         "issue_url_base": {"type": "string", "description": "repo を使わない場合のタスクリンク先接頭辞（末尾に番号が付く）"},

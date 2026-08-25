@@ -495,7 +495,8 @@ class Board:
             ssot_links.append(f'<a href="{esc(meta["board_url"])}">Projects</a>')
         if not ssot_links:
             ssot_links.append(esc(meta.get("state_note", "state ファイル")))
-        stamp_html = (f'<span class="stamp">生成 {esc(self.stamp)} ／ 状態の正本は '
+        stamp_prefix = f'{esc(meta["subtitle"])} ／ ' if meta.get("subtitle") else ""
+        stamp_html = (f'<span class="stamp">{stamp_prefix}生成 {esc(self.stamp)} ／ 状態の正本は '
                       + "・".join(ssot_links) + '</span>')
 
         # countdown tiles + auto progress tile
