@@ -70,6 +70,8 @@ python3 scripts/render.py board.yaml state.json --fragment > board-artifact.html
 
 手書き経路での注意（renderer 経路では自動的に守られる）:
 
+- **差し替える範囲は `<main>` の直後から `<div class="syncbar"` の直前まで**。`<style>`・`syncbar`・`<script>` は触らない。この境界で切ると CSS/JS 機構を1文字も壊さずに本文だけ入れ替えられる（配布先での実走で確認）
+- **生成は一時スクリプトファイル経由で行う**。HTML をシェルのヒアドキュメントに直接埋めるとクォートが壊れて生成に失敗する（同実走で確認）
 - **`KEY` と `REPORT_HEAD` にシングルクォート・`</script>`・バックスラッシュを含めない**。どちらも JS の単引用符リテラルに直接埋まるため、盤名に `'` が入ると構文が壊れ、`</script>` が入るとスクリプトが途中で終了する。`REPORT_HEAD` には盤名を必ず入れる規約（下記）があるので、盤名の側でこれらの文字を避ける
 - **`REPORT_HEAD` には盤名を必ず入れる** — `[<盤名>チェック報告 v1] ` 形式。報告を受け取る側は、この見出しで「どの盤の報告か」を特定する。複数の盤を並行運用すると、盤名がないと report がどれに属するか判別できない
 - **正本で完了を確認済みのステップ**は、input に `checked disabled` を付けたうえで、その `label.ck` に `.ssot-done` を付ける（緑チェック＋緑の取り消し線）。`.ssot-done` を落とすと通常の減光表示になり、「端末ローカルでチェックしただけ」と「正本で確認済み」が見分けられなくなる
@@ -94,6 +96,7 @@ python3 scripts/render.py board.yaml state.json --fragment > board-artifact.html
 - [ ] 人間レーンの箱に「AIで代替可能な作業」が混ざっていない
 - [ ] 完了条件がすべて機械検証可能（コマンド or 観測可能な事実）
 - [ ] `bash scripts/check.sh` が OK
+- [ ] 手書き経路の生成物は `python3 scripts/check_board.py <盤.html>` が OK（レーン数・各行セル数・connector 位置の機械検証。renderer 経路は validate() が担う）
 
 ## 運用の使い分け
 
