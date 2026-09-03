@@ -33,6 +33,7 @@ audience: ai
 - **タスク** = 箱の中身。4欄: ゴール / 手順（steps）/ 完了条件（accepts・機械検証コマンド付き）/ 依存（deps）
 - **束（bundle）** = 人間キュー。同質作業（ブラウザ作業・外出・署名会）をまとめ、1回の腰上げで消化できる単位にする
 - **状態は書かない**。ready/blocked/done は renderer が state.json と deps から導出する
+- **issue を立てない人間・AI ステップ**（本人が質問に答える・PC を起動する・承認する等）は、合成 id（例 9001〜）の task に `link: false`（番号を issue にリンクしない）と `display: "承認1"`（`#N` の代わりに表示する短い名札）を付けて置く。state.json に同じ number の row（title・state）を持たせる。運用規約が「手順分解で issue を増やさない」場合の受け皿で、正本は隣接する issue 側（`next_action` に根拠 issue を書く）。チェック報告・localStorage キーは従来どおり数値 id を使う（`examples/board.yaml` の task 9001 が実例）
 
 ### 3. 出口を先に決める（骨格の有無が変わる）
 

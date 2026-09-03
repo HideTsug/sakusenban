@@ -196,17 +196,25 @@ class Board:
             return esc(f'{self.meta["issue_url_base"]}{n}')
         return None
 
+    def task_href(self, n):
+        return self.issue_href(n) if self.tasks[n].get("link", True) else None
+
+    def task_label(self, n):
+        return esc(self.tasks[n].get("display", f"#{n}"))
+
     def task_no(self, n):
-        href = self.issue_href(n)
+        href = self.task_href(n)
+        label = self.task_label(n)
         if href:
-            return f'<a class="tno" href="{href}">#{n}</a>'
-        return f'<span class="tno">#{n}</span>'
+            return f'<a class="tno" href="{href}">{label}</a>'
+        return f'<span class="tno">{label}</span>'
 
     def blocker_chips(self, ids):
         parts = []
         for d in ids:
-            href = self.issue_href(d)
-            parts.append(f'<a href="{href}">#{d}</a>' if href else f'#{d}')
+            href = self.task_href(d)
+            label = self.task_label(d)
+            parts.append(f'<a href="{href}">{label}</a>' if href else label)
         return " ".join(parts)
 
     def owner_kind(self, t):

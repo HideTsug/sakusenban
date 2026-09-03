@@ -76,6 +76,8 @@
         "required": ["id", "owner"],
         "properties": {
           "id": {"type": "integer", "description": "state.json の number と一致させる（GitHub なら issue 番号）"},
+          "link": {"type": "boolean", "default": true, "description": "false の場合は番号表示を issue にリンクしない"},
+          "display": {"type": "string", "description": "番号表示（既定: #N）を任意の文字列で置き換える"},
           "owner": {"type": "string", "pattern": "^(human|ai|joint):", "description": "実行主体。human:<名前> / ai:<名前> / joint:<名前>"},
           "owner_label": {"type": "string", "description": "owner チップの表示名を上書き（既定: 人間/AI/人間+相手）"},
           "bundle": {"type": "string"},

@@ -3,5 +3,6 @@
   {"number": 2, "title": "経費CSVの取得", "state": "OPEN"},
   {"number": 3, "title": "突合と月次サマリ生成", "state": "OPEN"},
   {"number": 4, "title": "独立検算", "state": "OPEN"},
-  {"number": 5, "title": "確認・合意・納品", "state": "OPEN"}
+  {"number": 5, "title": "確認・合意・納品", "state": "OPEN"},
+  {"number": 9001, "title": "業務用PCを起動", "state": "OPEN"}
 ]

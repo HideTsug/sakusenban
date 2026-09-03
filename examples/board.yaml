@@ -21,6 +21,14 @@ bundles:
     items: [1, 2]
 
 tasks:
+  - id: 9001
+    owner: human:operator-a
+    link: false
+    display: "PC起動"
+    next_action: "業務用PCを起動して業務システムへログインする"
+    accepts:
+      - text: "業務システムの画面が開いている"
+
   - id: 1
     owner: human:operator-a
     bundle: A
@@ -77,7 +85,7 @@ flow:
     - key: report
       name: "月次レポート"
       boxes:
-        - {key: r1, lane: op-a, name: "データ収集", tasks: [1, 2], bundle: A}
+        - {key: r1, lane: op-a, name: "データ収集", tasks: [9001, 1, 2], bundle: A}
         - {key: r2, lane: ai-a, name: "突合・サマリ生成", tasks: [3]}
         - {key: r3, lane: ai-b, name: "独立検算", tasks: [4]}
         - {key: r4, lane: both, name: "確認・合意・納品", tasks: [5]}
