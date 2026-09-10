@@ -1,0 +1,13 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "sakusenban",
+  "description": "Expandable swimlane task boards for human + AI collaboration: one self-contained HTML file with lanes per actor, boxes in dependency order, checklists and machine-readable check reports; state lives in GitHub Issues or a local JSON file.",
+  "folders": [],
+  "excludeFolders": ["node_modules", ".git", ".ralph"],
+  "excludeFiles": [],
+  "rules": [
+    "The board is a generated view: update the source of truth (GitHub Issues or state.json) first, then regenerate. Never hand-edit generated HTML.",
+    "Read docs/authoring-guide.md before creating or updating a board.",
+    "Put only human-only work in human lanes, and give every task a source."
+  ]
+}
