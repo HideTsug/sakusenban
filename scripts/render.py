@@ -692,6 +692,7 @@ class Board:
             parts.append(f'<div class="lanehead lane-{lane["kind"]}" '
                          f'style="grid-row:1;grid-column:{rails_l + col * 2 + 1} / span 2">'
                          f'{esc(lane["label"])}</div>')
+        exit_boxes = set()
         for i, box in enumerate(boxes, 1):
             incoming = [r for r in routes if r["to"] == box["key"]]
             outgoing = sorted((r for r in routes if r["from"] == box["key"]),
@@ -702,7 +703,8 @@ class Board:
                          f'style="grid-row:ch-{i};grid-column:{lane_columns};min-height:{height}px"></div>')
             adjacent = [r for r in incoming if r["route"] == "adjacent"]
             for index, route in enumerate(adjacent):
-                label = "／".join(r["label"] for r in adjacent if r["label"]) if index == 0 else ""
+                label = ("／".join(r["label"] for r in adjacent if r["label"])
+                         if index == 0 and route["from"] not in exit_boxes else "")
                 parts.append(self.connector(by_key[route["from"]], box, used_lane_cols,
                                             f'grid-row:ch-{i} / bx-{i};grid-column:{lane_columns};'
                                             f'--arrival:{route["arrival"]}px', dict(route, label=label)))
@@ -715,6 +717,7 @@ class Board:
                              f'style="grid-row:bx-{i};grid-column:{rails_l + col * 2 + 1} / span 2">'
                              f'{content}</div>')
             if has_exits:
+                exit_boxes.add(box["key"])
                 col = rails_l + 2 * used_lane_cols[box["lane"]] - 1
                 parts.append(f'<div class="exitcell" style="grid-row:ex-{i};grid-column:{col} / span 2">'
                              f'{self.render_exits(stream, outgoing, by_key)}</div>')
@@ -722,7 +725,16 @@ class Board:
                           if has_exits or any(r["label"] for r in outgoing) else "")
             parts.append(self.render_box_body(stream, box, f'grid-row:bd-{i};grid-column:{lane_columns}', full_exits))
         for route in routes:
-            if route["route"] != "adjacent":
+            if route["route"] == "adjacent":
+                if route["from"] in exit_boxes:
+                    col = rails_l + 2 * used_lane_cols[by_key[route["from"]]["lane"]]
+                    parts.append(
+                        f'<div class="edge stem main" aria-hidden="true" '
+                        f'data-edge-from="{esc(self.box_id(stream["key"], route["from"]))}" '
+                        f'data-edge-to="{esc(self.box_id(stream["key"], route["to"]))}">'
+                        f'<span class="v" style="grid-row:ex-{route["source"]} / ch-{route["target"]};'
+                        f'grid-column:{col} / {col + 1};top:calc({route["exit_index"]}*24px + 13px)"></span></div>')
+            else:
                 route = dict(route, from_lane=by_key[route["from"]]["lane"], to_lane=by_key[route["to"]]["lane"])
                 parts.append(self.render_graph_edge(stream, route, used_lane_cols, rails_l))
         parts.append('</div></div></section>')
@@ -798,7 +810,7 @@ class Board:
             '<span>☑ = この端末のチェック（正本反映は下の「報告をコピー」→AIへ）</span>'
             '<span>箱をタップすると中のタスクが開く</span></div>')
         if any("next" in box or "optional" in box for stream in self.flow["streams"] for box in stream["boxes"]):
-            legend = legend[:-6] + ('<span>太線=既定の進行／細線=分岐／破線=例外／点線=戻り／'
+            legend = legend[:-6] + ('<span>実線=通常／破線=例外／点線=戻り／'
                                     '分岐 N=出口が複数ある箱</span></div>')
 
         timeline = ""

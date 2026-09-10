@@ -84,6 +84,14 @@ def check_graph(grid, gi, report):
     nodes = list(descendants(grid))
     ids = {node["attrs"].get("id") for node in nodes if has(node, "flowbox")}
     ids.discard(None)
+    box_rows = {node["attrs"]["id"]: row.removeprefix("bx-")
+                for row, cells in rows.items() for cell in cells
+                for node in descendants(cell) if has(node, "flowbox") and node["attrs"].get("id")}
+    exit_rows = {style(child).get("grid-row") for child in grid["children"] if has(child, "exitcell")}
+    stems = [node for node in nodes if has(node, "edge") and has(node, "stem")]
+    adjacent_mains = [node for node in nodes if has(node, "connector")
+                      and node["attrs"].get("data-edge-type") == "main"
+                      and node["attrs"].get("data-route") == "adjacent"]
     for node in nodes:
         attrs = node["attrs"]
         if has(node, "edge"):
@@ -110,6 +118,38 @@ def check_graph(grid, gi, report):
             geom = abs(l - min(f, t)) < 0.01 and abs(w - abs(f - t)) < 0.01
             onlane = all(any(abs(v - ctr) < 0.01 for ctr in centers) for v in (f, t))
             report(f"grid {gi} connector {f} -> {t}", geom and onlane)
+            source, target = attrs.get("data-edge-from"), attrs.get("data-edge-to")
+            source_row, target_row = box_rows.get(source), box_rows.get(target)
+            if (attrs.get("data-edge-type") != "main" or attrs.get("data-route") != "adjacent"
+                    or f"ex-{source_row}" not in exit_rows):
+                continue
+            matching = [stem for stem in stems if stem["attrs"].get("data-edge-from") == source
+                        and stem["attrs"].get("data-edge-to") == target]
+            expected = sum(connector["attrs"].get("data-edge-from") == source
+                           and connector["attrs"].get("data-edge-to") == target
+                           for connector in adjacent_mains)
+            label = f"grid {gi} stem {source} -> {target}"
+            report(f"{label}: count={len(matching)} (期待 {expected})", len(matching) == expected)
+            for stem in matching:
+                segments = [child for child in stem["children"] if has(child, "v")]
+                report(f"{label}: v count={len(segments)} (期待 1)", len(segments) == 1)
+                for segment in segments:
+                    placement = style(segment)
+                    row_span = [part.strip() for part in placement.get("grid-row", "").split("/")]
+                    report(f"{label}: grid-row 両端", target_row is not None and
+                           row_span == [f"ex-{source_row}", f"ch-{target_row}"])
+                    try:
+                        start, end = [int(part.strip()) for part in values["grid-column"].split("/")]
+                        # Match rounded connector percentages to a lane before converting to grid lines.
+                        lane = next(i for i, center in enumerate(centers) if abs(f - center) < 0.01)
+                        column = start + lane * 2 + 1
+                        col_start, col_end = [int(part.strip())
+                                              for part in placement["grid-column"].split("/")]
+                        aligned = (start > 0 and end - start == 2 * n
+                                   and (col_start, col_end) == (column, column + 1))
+                    except (KeyError, ValueError, StopIteration):
+                        aligned = False
+                    report(f"{label}: grid-column 両端・connector --from レーン中心", aligned)
 
 
 def check_file(path: str) -> bool:

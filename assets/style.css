@@ -192,8 +192,7 @@ background:var(--surface-2);text-decoration:none;white-space:nowrap;overflow:hid
 .flowgrid.graph>.connector{position:absolute;inset:0;height:auto;margin:0}
 /* A contents group lets every segment use the outer grid, including variable-height body rows. */
 .flowgrid.graph .edge{display:contents;pointer-events:none}
-.flowgrid.graph .edge,.flowgrid.graph .connector{--weight:1.5px;--pattern-h:none;--pattern-v:none;--period:10px}
-.flowgrid.graph .connector{--weight:2.5px}
+.flowgrid.graph .edge,.flowgrid.graph .connector{--weight:2px;--pattern-h:none;--pattern-v:none;--period:10px}
 /* SVGs are alpha masks only; every visible stroke uses the same line token. */
 .flowgrid.graph .edge.alt{--pattern-h:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 1' preserveAspectRatio='none'%3E%3Cpath d='M0 .5H10' stroke='black' stroke-dasharray='6 4'/%3E%3C/svg%3E");
 --pattern-v:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 10' preserveAspectRatio='none'%3E%3Cpath d='M.5 0V10' stroke='black' stroke-dasharray='6 4'/%3E%3C/svg%3E")}
@@ -223,6 +222,7 @@ border:0;height:var(--weight);background:var(--line-strong);mask-image:var(--pat
 .flowgrid.graph .edge .v{top:0;bottom:0}
 .flowgrid.graph .edge.skip .v{right:7px}
 .flowgrid.graph .edge.return .v{left:7px}
+.flowgrid.graph .edge.stem .v{left:0;z-index:0}
 .flowgrid.graph .edge>.arrow{left:0;top:14px;bottom:0;width:var(--weight)}
 .flowgrid.graph .edge>.arrow::before{content:"";position:absolute;left:0;top:0;bottom:0}
 .flowgrid.graph .edge>.arrow::after{content:"";position:absolute;left:calc(var(--weight)/2 - 5px);bottom:0;
