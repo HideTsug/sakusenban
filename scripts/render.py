@@ -90,9 +90,38 @@ def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def normalize_edges(stream):
+    """Normalize a validated stream into ordered edges with stream-local box keys.
+
+    label defaults to "", kind to None; type is main, skip, or return.
+    """
+    boxes = stream.get("boxes", [])
+    positions = {box["key"]: index for index, box in enumerate(boxes)}
+    default_targets = [None] * len(boxes)
+    next_required = None
+    for index in range(len(boxes) - 1, -1, -1):
+        default_targets[index] = next_required
+        if not boxes[index].get("optional", False):
+            next_required = boxes[index]["key"]
+
+    edges = []
+    for index, box in enumerate(boxes):
+        default_to = default_targets[index]
+        outgoing = box.get("next", [] if default_to is None else [{"to": default_to}])
+        for edge in outgoing:
+            target = edge["to"]
+            edge_type = ("return" if positions[target] < index
+                         else "main" if target == default_to else "skip")
+            edges.append({"stream": stream["key"], "from": box["key"], "to": target,
+                          "label": edge.get("label", ""), "kind": edge.get("kind"),
+                          "type": edge_type})
+    return edges
+
+
 def validate(manifest):
-    """Mechanical invariant checks. Returns a list of error strings."""
+    """Return invariant errors and emit non-fatal warnings to stderr."""
     errors = []
+    warnings = []
     meta = manifest.get("meta") or {}
     for key in ("title", "key"):
         if not meta.get(key):
@@ -103,8 +132,8 @@ def validate(manifest):
             errors.append(f"meta.{key} must start with http:// or https://")
     flow = manifest.get("flow") or {}
     lanes = flow.get("lanes") or []
-    if not lanes:
-        errors.append("flow.lanes is required (1-4 lanes)")
+    if not 1 <= len(lanes) <= 6:
+        errors.append("flow.lanes must contain 1-6 lanes")
     lane_keys = set()
     for lane in lanes:
         if lane.get("kind") not in LANE_KINDS:
@@ -138,7 +167,10 @@ def validate(manifest):
                 elif item not in id_set:
                     errors.append(f"bundle {bkey}: references unknown task {item}")
     for stream_index, stream in enumerate(flow.get("streams", [])):
-        for box_index, box in enumerate(stream.get("boxes", [])):
+        stream_error_count = len(errors)
+        boxes = stream.get("boxes", [])
+        box_keys = {box.get("key") for box in boxes}
+        for box_index, box in enumerate(boxes):
             where = f'{stream.get("key")}.{box.get("key")}'
             if box.get("lane") not in lane_keys:
                 errors.append(f'{where}: unknown lane {box.get("lane")}')
@@ -152,6 +184,59 @@ def validate(manifest):
             bkey = box.get("bundle")
             if bkey and bkey not in bundles:
                 errors.append(f"{where}: unknown bundle {bkey}")
+            if "optional" in box:
+                if not isinstance(box["optional"], bool):
+                    errors.append(f"{where}: optional must be a boolean")
+                elif box_index == 0 and box["optional"]:
+                    errors.append(f"{where}: the first box cannot be optional")
+            if "next" not in box:
+                continue
+            outgoing = box["next"]
+            if not isinstance(outgoing, list):
+                errors.append(f"{where}: next must be an array")
+                continue
+            for edge_index, edge in enumerate(outgoing):
+                edge_where = f"{where}.next[{edge_index}]"
+                if not isinstance(edge, dict):
+                    errors.append(f"{edge_where} must be an object")
+                    continue
+                target = edge.get("to")
+                if not isinstance(target, str):
+                    errors.append(f"{edge_where}.to is required and must be a string")
+                elif target not in box_keys:
+                    errors.append(f"{edge_where}.to references unknown box {target} in this stream")
+                elif target == box.get("key"):
+                    errors.append(f"{edge_where}.to cannot reference its own box")
+                label = edge.get("label")
+                if "label" in edge and not isinstance(label, str):
+                    errors.append(f"{edge_where}.label must be a string")
+                elif len(outgoing) >= 2 and (label is None or not label.strip()):
+                    errors.append(f"{edge_where}.label is required for 2 or more outgoing edges")
+                if isinstance(label, str) and len(label) > 24:
+                    warnings.append(f"{edge_where}.label exceeds 24 characters ({len(label)})")
+                if "kind" in edge and edge["kind"] != "alt":
+                    errors.append(f"{edge_where}.kind must be alt when specified")
+
+        # Only analyze topology once this stream's references and fields are valid.
+        if len(errors) == stream_error_count:
+            edges = normalize_edges(stream)
+            incoming = {edge["to"] for edge in edges}
+            forward = {box["key"]: [] for box in boxes}
+            for edge in edges:
+                if edge["type"] in ("main", "skip"):
+                    forward[edge["from"]].append(edge["to"])
+            reachable = {boxes[0]["key"]} if boxes else set()
+            for box in boxes:
+                if box["key"] in reachable:
+                    reachable.update(forward[box["key"]])
+            for box in boxes[1:]:
+                where = f'{stream.get("key")}.{box["key"]}'
+                if box["key"] not in incoming:
+                    warnings.append(f"{where}: box has no incoming edges")
+                if box["key"] not in reachable:
+                    warnings.append(f"{where}: box is unreachable from the first box via forward edges")
+    for warning in warnings:
+        print(f"render.py: warning: {warning}", file=sys.stderr)
     return errors
 
 
@@ -162,6 +247,8 @@ class Board:
         self.tasks = {t["id"]: t for t in manifest.get("tasks", [])}
         self.bundles = manifest.get("bundles", {}) or {}
         self.flow = manifest["flow"]
+        self.edges = [edge for stream in self.flow.get("streams", [])
+                      for edge in normalize_edges(stream)]
         self.lanes = self.flow["lanes"]
         self.state = {r["number"]: r for r in state_rows}
         self.fields = fields
