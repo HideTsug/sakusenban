@@ -166,10 +166,24 @@ def validate(manifest):
                     errors.append(f"bundles.{bkey}.{field}[{item_index}] must be an int")
                 elif item not in id_set:
                     errors.append(f"bundle {bkey}: references unknown task {item}")
-    for stream_index, stream in enumerate(flow.get("streams", [])):
+    streams = flow.get("streams", [])
+    stream_keys = set()
+    duplicate_stream_keys = set()
+    for stream in streams:
+        stream_key = stream.get("key")
+        if stream_key in stream_keys:
+            errors.append(f"duplicate stream key: {stream_key}")
+            duplicate_stream_keys.add(stream_key)
+        stream_keys.add(stream_key)
+    for stream_index, stream in enumerate(streams):
         stream_error_count = len(errors)
         boxes = stream.get("boxes", [])
-        box_keys = {box.get("key") for box in boxes}
+        box_keys = set()
+        for box in boxes:
+            box_key = box.get("key")
+            if box_key in box_keys:
+                errors.append(f'{stream.get("key")}.{box_key}: duplicate box key')
+            box_keys.add(box_key)
         for box_index, box in enumerate(boxes):
             where = f'{stream.get("key")}.{box.get("key")}'
             if box.get("lane") not in lane_keys:
@@ -217,8 +231,8 @@ def validate(manifest):
                 if "kind" in edge and edge["kind"] != "alt":
                     errors.append(f"{edge_where}.kind must be alt when specified")
 
-        # Only analyze topology once this stream's references and fields are valid.
-        if len(errors) == stream_error_count:
+        # Only analyze topology once this stream's keys, references and fields are valid.
+        if stream.get("key") not in duplicate_stream_keys and len(errors) == stream_error_count:
             edges = normalize_edges(stream)
             incoming = {edge["to"] for edge in edges}
             forward = {box["key"]: [] for box in boxes}
@@ -500,6 +514,8 @@ class Board:
             f'<span class="owner {kind}">{esc(self.lane_label_map[box["lane"]])}</span>',
             f'<span class="state {st}">{STATE_LABEL[st]}</span>',
         ]
+        if box.get("optional"):
+            meta_bits.append('<span class="chip cond">条件付き</span>')
         if box.get("bundle"):
             meta_bits.append(f'<span class="bkey">束{esc(box["bundle"])}</span>')
         goal = self.box_goal(box)
@@ -514,7 +530,8 @@ class Board:
             f'<span class="boxprog" data-boxprog="{esc(bdid)}" data-task-done="{task_done}" '
             f'data-task-total="{len(ids)}">{self.static_checkbox_progress(box)}</span>')
         return (
-            f'<article class="flowbox {kind} {st}" id="{esc(bid)}" data-box="{esc(bid)}">'
+            f'<article class="flowbox {kind} {st}{" optional" if box.get("optional") else ""}" '
+            f'id="{esc(bid)}" data-box="{esc(bid)}">'
             f'<button class="boxhead" type="button" aria-expanded="false" '
             f'aria-controls="{esc(bdid)}">'
             f'<span class="boxtitle"><span class="boxnum">{idx}</span>'
@@ -522,31 +539,153 @@ class Board:
             f'<span class="boxmeta">{"".join(meta_bits)}</span>'
             f'</button></article>')
 
-    def render_box_body(self, stream, box):
+    def render_box_body(self, stream, box, placement=""):
         bdid = self.body_id(stream["key"], box["key"])
         blocks = [self.bundle_note(box)]
         blocks.extend(self.task_block(self.tasks[n]) for n in self.box_task_ids(box))
         blocks.extend(self.bundle_extra_blocks(box))
-        return f'<div class="boxbody" id="{esc(bdid)}" hidden>{"".join(blocks)}</div>'
+        style = f' style="{placement}"' if placement else ""
+        return f'<div class="boxbody" id="{esc(bdid)}"{style} hidden>{"".join(blocks)}</div>'
 
     @staticmethod
-    def connector(prev_box, next_box, used_lane_cols):
+    def connector(prev_box, next_box, used_lane_cols, placement="", edge=None):
         total = len(used_lane_cols)
         from_center = (used_lane_cols[prev_box["lane"]] - 0.5) / total * 100
         to_center = (used_lane_cols[next_box["lane"]] - 0.5) / total * 100
         left = min(from_center, to_center)
         width = abs(to_center - from_center)
+        extra = f';{placement}' if placement else ""
+        alt = " alt" if edge and edge["kind"] == "alt" else ""
+        label = f'<span class="elabel">{esc(edge["label"])}</span>' if edge and edge["label"] else ""
         return (
-            '<div class="connector" aria-hidden="true" '
+            f'<div class="connector{alt}" aria-hidden="true" '
             f'style="--from:{from_center:.4f}%;--to:{to_center:.4f}%;'
-            f'--left:{left:.4f}%;--width:{width:.4f}%">'
+            f'--left:{left:.4f}%;--width:{width:.4f}%{extra}">'
             '<span class="v1"></span><span class="h"></span><span class="v2"></span><span class="arrow"></span>'
+            f'{label}</div>')
+
+    @staticmethod
+    def graph_routes(boxes, edges):
+        """Partition closed row intervals; ties retain normalized edge order."""
+        positions = {box["key"]: i + 1 for i, box in enumerate(boxes)}
+        routes = []
+        for edge in edges:
+            source, target = positions[edge["from"]], positions[edge["to"]]
+            # Logical main edges can jump over optional boxes: route those via a rail.
+            route = ("return" if target < source else "skip" if target > source + 1
+                     or edge["type"] == "skip" else "main")
+            routes.append(dict(edge, route=route, source=source, target=target))
+        counts = {}
+        for side in ("return", "skip"):
+            intervals = [(min(3 * r["source"], 3 * r["target"] - 1),
+                          max(3 * r["source"], 3 * r["target"] - 1), i)
+                         for i, r in enumerate(routes) if r["route"] == side]
+            ends = []
+            for start, end, i in sorted(intervals, key=lambda item: (item[0], item[2])):
+                rail = next((j for j, previous_end in enumerate(ends) if previous_end < start), len(ends))
+                if rail == len(ends):
+                    ends.append(end)
+                else:
+                    ends[rail] = end
+                routes[i]["rail"] = rail + 1
+            counts[side] = len(ends)
+        for key, field in (("from", "departure"), ("to", "arrival")):
+            for box in boxes:
+                group = [r for r in routes if r[key] == box["key"]
+                         and (field == "arrival" or r["route"] != "main")]
+                for i, route in enumerate(group):
+                    route[field] = 50 if len(group) == 1 else 35 + 30 * i / (len(group) - 1)
+        return routes, counts["return"], counts["skip"]
+
+    def render_graph_edge(self, stream, route, used_lane_cols, rails_l):
+        source, target = route["source"], route["target"]
+        from_col = rails_l + 2 * used_lane_cols[route["from_lane"]]
+        to_col = rails_l + 2 * used_lane_cols[route["to_lane"]]
+        returning = route["route"] == "return"
+        rail_col = (rails_l - route["rail"] + 1 if returning
+                    else rails_l + 2 * len(used_lane_cols) + route["rail"])
+        h1_cols = f'{rail_col} / {from_col}' if returning else f'{from_col} / {rail_col + 1}'
+        h2_cols = f'{rail_col} / {to_col}' if returning else f'{to_col} / {rail_col + 1}'
+        v_rows = f'bx-{target} / bx-{source}' if returning else f'bd-{source} / ch-{target}'
+        label = f'<span class="elabel">{esc(route["label"])}</span>' if route["label"] else ""
+        alt = " alt" if route["kind"] == "alt" else ""
+        return (
+            f'<div class="edge {route["route"]}{alt}" aria-hidden="true" '
+            f'data-edge-from="{esc(self.box_id(stream["key"], route["from"]))}" '
+            f'data-edge-to="{esc(self.box_id(stream["key"], route["to"]))}" '
+            f'data-rail="{route["rail"]}" style="--departure:{route["departure"]:.4f}%;'
+            f'--arrival:{route["arrival"]:.4f}%">'
+            f'<span class="h1" style="grid-row:bx-{source} / bd-{source};grid-column:{h1_cols}"></span>'
+            f'<span class="v" style="grid-row:{v_rows};grid-column:{rail_col} / {rail_col + 1}"></span>'
+            f'<span class="h2" style="grid-row:ch-{target} / bx-{target};grid-column:{h2_cols}">{label}</span>'
+            f'<span class="arrow" style="grid-row:ch-{target} / bx-{target};grid-column:{to_col} / {to_col + 1}"></span>'
             '</div>')
+
+    def render_graph_stream(self, stream, used_lanes, used_lane_cols):
+        boxes = stream["boxes"]
+        by_key = {box["key"]: box for box in boxes}
+        edges = [edge for edge in self.edges if edge["stream"] == stream["key"]]
+        routes, rails_l, rails_r = self.graph_routes(boxes, edges)
+        lane_columns = f'{rails_l + 1} / {rails_l + 2 * len(used_lanes) + 1}'
+        # repeat(0, ...) invalidates the entire CSS track list; omit empty sides.
+        columns = ((f'repeat({rails_l},14px) ' if rails_l else '')
+                   + 'repeat(calc(var(--lanes)*2),minmax(0,1fr))'
+                   + (f' repeat({rails_r},14px)' if rails_r else ''))
+        rows = 'auto ' + ' '.join(f'[ch-{i}] minmax(28px,auto) [bx-{i}] auto [bd-{i}] auto'
+                                 for i in range(1, len(boxes) + 1)) + ' [end]'
+        parts = [f'<section class="stream" id="stream-{esc(stream["key"])}">',
+                 f'<h2>{esc(stream["name"])}</h2>',
+                 f'<div class="flowgrid graph" data-flow-mode="graph" '
+                 f'style="--lanes:{len(used_lanes)};--rails-l:{rails_l};--rails-r:{rails_r};'
+                 f'grid-template-columns:{columns};grid-template-rows:{rows}">']
+        for col, lane in enumerate(used_lanes):
+            parts.append(f'<div class="lanehead lane-{lane["kind"]}" '
+                         f'style="grid-row:1;grid-column:{rails_l + col * 2 + 1} / span 2">'
+                         f'{esc(lane["label"])}</div>')
+        for i, box in enumerate(boxes, 1):
+            incoming = [r for r in routes if r["to"] == box["key"]]
+            # Decorative labels stay on one line; reserve at least 18px between them.
+            height = max(40, 60 * (len(incoming) - 1)) if any(r["label"] for r in incoming) else 28
+            parts.append(f'<div class="channel" aria-hidden="true" '
+                         f'style="grid-row:ch-{i};grid-column:{lane_columns};min-height:{height}px"></div>')
+            for route in incoming:
+                if route["route"] == "main":
+                    parts.append(self.connector(by_key[route["from"]], box, used_lane_cols,
+                                                f'grid-row:ch-{i} / bx-{i};grid-column:{lane_columns};'
+                                                f'--arrival:{route["arrival"]:.4f}%', route))
+            for col, lane in enumerate(used_lanes):
+                content = ""
+                occupied = lane["key"] == box["lane"]
+                if occupied:
+                    content = self.render_box_head(stream, box, i)
+                    exits = []
+                    for route in routes:
+                        if route["from"] != box["key"] or (route["type"] == "main" and not route["label"]):
+                            continue
+                        target = by_key[route["to"]]
+                        bid = esc(self.box_id(stream["key"], target["key"]))
+                        prefix = f'{route["label"]} → ' if route["label"] else '→ '
+                        exits.append(f'<a class="exit" href="#{bid}" data-open-box="{bid}">'
+                                     f'{esc(prefix)}{route["target"]} {esc(target["name"])}</a>')
+                    if exits:
+                        content += f'<div class="exits">{"".join(exits)}</div>'
+                parts.append(f'<div class="lanecell lane-{lane["kind"]}{" occupied" if occupied else ""}" '
+                             f'style="grid-row:bx-{i};grid-column:{rails_l + col * 2 + 1} / span 2">'
+                             f'{content}</div>')
+            parts.append(self.render_box_body(stream, box, f'grid-row:bd-{i};grid-column:{lane_columns}'))
+        for route in routes:
+            if route["route"] != "main":
+                route = dict(route, from_lane=by_key[route["from"]]["lane"], to_lane=by_key[route["to"]]["lane"])
+                parts.append(self.render_graph_edge(stream, route, used_lane_cols, rails_l))
+        parts.append('</div></section>')
+        return "".join(parts)
 
     def render_stream(self, stream):
         used_lane_keys = {box["lane"] for box in stream["boxes"]}
         used_lanes = [lane for lane in self.lanes if lane["key"] in used_lane_keys]
         used_lane_cols = {lane["key"]: idx + 1 for idx, lane in enumerate(used_lanes)}
+        if any("next" in box or "optional" in box for box in stream["boxes"]):
+            return self.render_graph_stream(stream, used_lanes, used_lane_cols)
         parts = [f'<section class="stream" id="stream-{esc(stream["key"])}">']
         parts.append(f'<h2>{esc(stream["name"])}</h2>')
         parts.append(f'<div class="flowgrid" style="--lanes:{len(used_lanes)}">')

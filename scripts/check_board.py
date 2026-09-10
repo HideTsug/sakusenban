@@ -20,6 +20,87 @@ renderer 経路は render.py の validate() が守るが、手書き盤には検
 import pathlib
 import re
 import sys
+from html.parser import HTMLParser
+
+
+class GridParser(HTMLParser):
+    """Keep graph checks inside the actual flowgrid, including nested box content."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack = [{"tag": "", "attrs": {}, "children": []}]
+        self.grids = []
+
+    def handle_starttag(self, tag, attrs):
+        node = {"tag": tag, "attrs": dict(attrs), "children": []}
+        self.stack[-1]["children"].append(node)
+        if "flowgrid" in (node["attrs"].get("class") or "").split():
+            self.grids.append(node)
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, 0, -1):
+            if self.stack[i]["tag"] == tag:
+                del self.stack[i:]
+                break
+
+
+def check_graph(grid, gi, report):
+    def has(node, cls):
+        return cls in (node["attrs"].get("class") or "").split()
+
+    def style(node):
+        return {key.strip(): value.strip()
+                for part in (node["attrs"].get("style") or "").split(";") if ":" in part
+                for key, value in [part.split(":", 1)]}
+
+    def descendants(node):
+        for child in node["children"]:
+            if has(child, "flowgrid"):
+                continue
+            yield child
+            yield from descendants(child)
+
+    declaration = style(grid).get("--lanes", "").strip()
+    if not declaration.isdigit() or not 1 <= int(declaration) <= 6:
+        report(f"grid {gi}: --lanes 宣言不正", False)
+        return
+    n = int(declaration)
+    heads = sum(has(child, "lanehead") for child in grid["children"])
+    report(f"grid {gi}: lanes={n} laneheads={heads}", heads == n)
+    rows = {}
+    for child in grid["children"]:
+        if has(child, "lanecell"):
+            row = style(child).get("grid-row", "").strip()
+            rows.setdefault(row, []).append(child)
+        elif has(child, "boxbody"):
+            # A body also witnesses its box row, so deleting a whole cell row fails.
+            row = style(child).get("grid-row", "").strip().replace("bd-", "bx-", 1)
+            rows.setdefault(row, [])
+    for row, cells in rows.items():
+        valid_row = bool(re.fullmatch(r"bx-[1-9]\d*", row))
+        report(f"grid {gi} row {row}: cells={len(cells)} (期待 {n})", valid_row and len(cells) == n)
+    nodes = list(descendants(grid))
+    ids = {node["attrs"].get("id") for node in nodes if has(node, "flowbox")}
+    ids.discard(None)
+    for node in nodes:
+        attrs = node["attrs"]
+        if has(node, "edge"):
+            source, target = attrs.get("data-edge-from"), attrs.get("data-edge-to")
+            report(f"grid {gi} edge {source} -> {target}", source in ids and target in ids)
+        if has(node, "connector"):
+            values = style(node)
+            try:
+                raw = [values[key].strip() for key in ("--from", "--to", "--left", "--width")]
+                f, t, l, w = [float(value[:-1]) for value in raw if value.endswith("%")]
+            except (KeyError, ValueError):
+                report(f"grid {gi}: connector 幾何宣言不正", False)
+                continue
+            centers = [(i + 0.5) / n * 100 for i in range(n)]
+            geom = abs(l - min(f, t)) < 0.01 and abs(w - abs(f - t)) < 0.01
+            onlane = all(any(abs(v - ctr) < 0.01 for ctr in centers) for v in (f, t))
+            report(f"grid {gi} connector {f} -> {t}", geom and onlane)
 
 
 def check_file(path: str) -> bool:
@@ -31,12 +112,19 @@ def check_file(path: str) -> bool:
         ok &= good
         print(f"  {label}: {'OK' if good else 'NG'}")
 
+    parser = GridParser()
+    parser.feed(h)
+    graphs = [grid for grid in parser.grids if grid["attrs"].get("data-flow-mode") == "graph"]
+    for gi, grid in enumerate(graphs, 1):
+        check_graph(grid, gi, report)
+
     chunks = [c for c in re.split(r'(?=<div class="flowgrid")', h)
               if c.startswith('<div class="flowgrid')]
-    if not chunks:
+    chunks = [chunk for chunk in chunks if not re.search(r'\bdata-flow-mode=[\"\']graph[\"\']', chunk.split(">", 1)[0])]
+    if not chunks and not graphs:
         print("  flowgrid が見つからない: NG")
         return False
-    for gi, chunk in enumerate(chunks, 1):
+    for gi, chunk in enumerate(chunks, len(graphs) + 1):
         opening = chunk.split(">", 1)[0]
         m = re.search(r"--lanes:\s*(\d+)", opening)
         if not m:
