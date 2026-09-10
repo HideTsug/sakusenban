@@ -503,7 +503,7 @@ class Board:
     def body_id(stream_key, box_key):
         return f'boxbody-{stream_key}-{box_key}'
 
-    def render_box_head(self, stream, box, idx):
+    def render_box_head(self, stream, box, idx, outgoing=0):
         bid = self.box_id(stream["key"], box["key"])
         bdid = self.body_id(stream["key"], box["key"])
         kind = self.lane_kind_map[box["lane"]]
@@ -516,6 +516,8 @@ class Board:
         ]
         if box.get("optional"):
             meta_bits.append('<span class="chip cond">条件付き</span>')
+        if outgoing >= 2:
+            meta_bits.append(f'<span class="chip fork">分岐 {outgoing}</span>')
         if box.get("bundle"):
             meta_bits.append(f'<span class="bkey">束{esc(box["bundle"])}</span>')
         goal = self.box_goal(box)
@@ -539,13 +541,13 @@ class Board:
             f'<span class="boxmeta">{"".join(meta_bits)}</span>'
             f'</button></article>')
 
-    def render_box_body(self, stream, box, placement=""):
+    def render_box_body(self, stream, box, placement="", exits=""):
         bdid = self.body_id(stream["key"], box["key"])
         blocks = [self.bundle_note(box)]
         blocks.extend(self.task_block(self.tasks[n]) for n in self.box_task_ids(box))
         blocks.extend(self.bundle_extra_blocks(box))
         style = f' style="{placement}"' if placement else ""
-        return f'<div class="boxbody" id="{esc(bdid)}"{style} hidden>{"".join(blocks)}</div>'
+        return f'<div class="boxbody" id="{esc(bdid)}"{style} hidden>{exits}{"".join(blocks)}</div>'
 
     @staticmethod
     def connector(prev_box, next_box, used_lane_cols, placement="", edge=None):
@@ -557,69 +559,116 @@ class Board:
         extra = f';{placement}' if placement else ""
         alt = " alt" if edge and edge["kind"] == "alt" else ""
         label = f'<span class="elabel">{esc(edge["label"])}</span>' if edge and edge["label"] else ""
+        attributes = (f' data-edge-type="{edge["type"]}" data-route="{edge["route"]}" '
+                      f'data-edge-from="{esc(Board.box_id(edge["stream"], edge["from"]))}" '
+                      f'data-edge-to="{esc(Board.box_id(edge["stream"], edge["to"]))}"' if edge else "")
+        arrival = ('<span class="v2"></span><span class="arrow"></span>'
+                   if edge is None or edge["arrow"] else "")
         return (
-            f'<div class="connector{alt}" aria-hidden="true" '
+            f'<div class="connector{alt}" aria-hidden="true"{attributes} '
             f'style="--from:{from_center:.4f}%;--to:{to_center:.4f}%;'
             f'--left:{left:.4f}%;--width:{width:.4f}%{extra}">'
-            '<span class="v1"></span><span class="h"></span><span class="v2"></span><span class="arrow"></span>'
+            f'<span class="v1"></span><span class="h"></span>{arrival}'
             f'{label}</div>')
 
     @staticmethod
     def graph_routes(boxes, edges):
-        """Partition closed row intervals; ties retain normalized edge order."""
+        """Order exits and assign reusable rails, numbered from the lanes outward."""
         positions = {box["key"]: i + 1 for i, box in enumerate(boxes)}
         routes = []
         for edge in edges:
             source, target = positions[edge["from"]], positions[edge["to"]]
             # Logical main edges can jump over optional boxes: route those via a rail.
             route = ("return" if target < source else "skip" if target > source + 1
-                     or edge["type"] == "skip" else "main")
+                     or edge["type"] == "skip" or edge["kind"] == "alt" else "adjacent")
             routes.append(dict(edge, route=route, source=source, target=target))
+        for box in boxes:
+            outgoing = [r for r in routes if r["from"] == box["key"]]
+            # Forward spans descend, return spans ascend; stable ties keep input order.
+            outgoing.sort(key=lambda r: (0 if r["route"] == "adjacent" else
+                                         2 if r["route"] == "return" else 1,
+                                         r["source"] - r["target"]))
+            for i, route in enumerate(outgoing):
+                route["exit_index"] = i
+        for box in boxes:
+            # Keep adjacent labels above every incoming rail, clear of its horizontal line.
+            # Parallel rail edges arrive in reverse exit order to avoid crossing at h2.
+            incoming = sorted((r for r in routes if r["to"] == box["key"]),
+                              key=lambda r: (r["route"] != "adjacent", r["source"],
+                                             -r["exit_index"] if r["route"] != "adjacent" else 0))
+            for i, route in enumerate(incoming):
+                route["arrival"] = 14 + 8 * i
+                route["arrow"] = i == len(incoming) - 1
         counts = {}
         for side in ("return", "skip"):
-            intervals = [(min(3 * r["source"], 3 * r["target"] - 1),
-                          max(3 * r["source"], 3 * r["target"] - 1), i)
+            intervals = [(min(4 * r["source"], 4 * r["target"] - 2),
+                          max(4 * r["source"], 4 * r["target"] - 2), i)
                          for i, r in enumerate(routes) if r["route"] == side]
-            ends = []
-            for start, end, i in sorted(intervals, key=lambda item: (item[0], item[2])):
-                rail = next((j for j, previous_end in enumerate(ends) if previous_end < start), len(ends))
-                if rail == len(ends):
-                    ends.append(end)
-                else:
-                    ends[rail] = end
-                routes[i]["rail"] = rail + 1
-            counts[side] = len(ends)
-        for key, field in (("from", "departure"), ("to", "arrival")):
-            for box in boxes:
-                group = [r for r in routes if r[key] == box["key"]
-                         and (field == "arrival" or r["route"] != "main")]
-                for i, route in enumerate(group):
-                    route[field] = 50 if len(group) == 1 else 35 + 30 * i / (len(group) - 1)
+            assigned = []
+            while intervals:
+                # Assign inner rails first: lower exits forward, upper exits returning.
+                eligible = [item for item in intervals if not any(
+                    routes[j]["source"] == routes[item[2]]["source"]
+                    and (routes[j]["exit_index"] > routes[item[2]]["exit_index"] if side == "skip"
+                         else routes[j]["exit_index"] < routes[item[2]]["exit_index"])
+                    for _, _, j in intervals)]
+                start, end, i = min(eligible, key=lambda item: (item[1] - item[0], item[2]))
+                overlapping = [routes[j]["rail"] for lo, hi, j in assigned
+                               if start <= hi and lo <= end]
+                routes[i]["rail"] = 1 + max(overlapping, default=0)
+                assigned.append((start, end, i))
+                intervals.remove((start, end, i))
+            counts[side] = max((routes[i]["rail"] for _, _, i in assigned), default=0)
         return routes, counts["return"], counts["skip"]
 
     def render_graph_edge(self, stream, route, used_lane_cols, rails_l):
         source, target = route["source"], route["target"]
-        from_col = rails_l + 2 * used_lane_cols[route["from_lane"]]
         to_col = rails_l + 2 * used_lane_cols[route["to_lane"]]
         returning = route["route"] == "return"
+        from_col = rails_l + 2 * used_lane_cols[route["from_lane"]] + (-1 if returning else 1)
         rail_col = (rails_l - route["rail"] + 1 if returning
                     else rails_l + 2 * len(used_lane_cols) + route["rail"])
         h1_cols = f'{rail_col} / {from_col}' if returning else f'{from_col} / {rail_col + 1}'
         h2_cols = f'{rail_col} / {to_col}' if returning else f'{to_col} / {rail_col + 1}'
-        v_rows = f'bx-{target} / bx-{source}' if returning else f'bd-{source} / ch-{target}'
-        label = f'<span class="elabel">{esc(route["label"])}</span>' if route["label"] else ""
+        v_rows = f'bx-{target} / ex-{source}' if returning else f'bd-{source} / ch-{target}'
         alt = " alt" if route["kind"] == "alt" else ""
+        arrow = (f'<span class="arrow" style="grid-row:ch-{target} / bx-{target};grid-column:{to_col} / {to_col + 1}"></span>'
+                 if route["arrow"] else "")
         return (
             f'<div class="edge {route["route"]}{alt}" aria-hidden="true" '
+            f'data-edge-type="{route["type"]}" data-route="{route["route"]}" '
             f'data-edge-from="{esc(self.box_id(stream["key"], route["from"]))}" '
             f'data-edge-to="{esc(self.box_id(stream["key"], route["to"]))}" '
-            f'data-rail="{route["rail"]}" style="--departure:{route["departure"]:.4f}%;'
-            f'--arrival:{route["arrival"]:.4f}%">'
-            f'<span class="h1" style="grid-row:bx-{source} / bd-{source};grid-column:{h1_cols}"></span>'
+            f'data-rail="{route["rail"]}" style="--departure:calc({route["exit_index"]}*24px + 13px);'
+            f'--arrival:{route["arrival"]}px">'
+            f'<span class="h1" style="grid-row:ex-{source} / bd-{source};grid-column:{h1_cols}"></span>'
             f'<span class="v" style="grid-row:{v_rows};grid-column:{rail_col} / {rail_col + 1}"></span>'
-            f'<span class="h2" style="grid-row:ch-{target} / bx-{target};grid-column:{h2_cols}">{label}</span>'
-            f'<span class="arrow" style="grid-row:ch-{target} / bx-{target};grid-column:{to_col} / {to_col + 1}"></span>'
-            '</div>')
+            f'<span class="h2" style="grid-row:ch-{target} / bx-{target};grid-column:{h2_cols}"></span>'
+            f'{arrow}</div>')
+
+    def render_exits(self, stream, outgoing, by_key, full=False):
+        items = []
+        for route in outgoing:
+            target = by_key[route["to"]]
+            bid = esc(self.box_id(stream["key"], target["key"]))
+            returning = route["route"] == "return"
+            alt = route["kind"] == "alt"
+            symbol = "↩" if returning else "⇢" if alt else "→"
+            kind = "戻り" if returning else "例外" if alt else "既定の進行" if route["route"] == "adjacent" else "分岐"
+            condition = route["label"] or kind
+            title = f'{condition} {symbol} {route["target"]} {target["name"]}'
+            name = target["name"]
+            if not full and len(name) > 14:
+                name = name[:14] + "…"
+            detail = f' <span class="routekind">（{kind}）</span>' if full else ""
+            items.append(
+                f'<li class="exit {route["route"]}{" alt" if alt else ""}">'
+                f'<a href="#{bid}" data-open-box="{bid}" title="{esc(title)}">'
+                f'<b class="cond">{esc(condition)}</b>{detail} '
+                f'<span class="to">{symbol} {route["target"]} {esc(name)}</span></a></li>')
+        if full:
+            return f'<div class="exitlist"><b>出口</b><ol>{"".join(items)}</ol></div>'
+        return f'<ol class="exits">{"".join(items)}</ol>'
 
     def render_graph_stream(self, stream, used_lanes, used_lane_cols):
         boxes = stream["boxes"]
@@ -631,10 +680,11 @@ class Board:
         columns = ((f'repeat({rails_l},14px) ' if rails_l else '')
                    + 'repeat(calc(var(--lanes)*2),minmax(0,1fr))'
                    + (f' repeat({rails_r},14px)' if rails_r else ''))
-        rows = 'auto ' + ' '.join(f'[ch-{i}] minmax(28px,auto) [bx-{i}] auto [bd-{i}] auto'
+        rows = 'auto ' + ' '.join(f'[ch-{i}] auto [bx-{i}] auto [ex-{i}] auto [bd-{i}] auto'
                                  for i in range(1, len(boxes) + 1)) + ' [end]'
         parts = [f'<section class="stream" id="stream-{esc(stream["key"])}">',
                  f'<h2>{esc(stream["name"])}</h2>',
+                 '<div class="graphwrap">',
                  f'<div class="flowgrid graph" data-flow-mode="graph" '
                  f'style="--lanes:{len(used_lanes)};--rails-l:{rails_l};--rails-r:{rails_r};'
                  f'grid-template-columns:{columns};grid-template-rows:{rows}">']
@@ -644,40 +694,38 @@ class Board:
                          f'{esc(lane["label"])}</div>')
         for i, box in enumerate(boxes, 1):
             incoming = [r for r in routes if r["to"] == box["key"]]
-            # Decorative labels stay on one line; reserve at least 18px between them.
-            height = max(40, 60 * (len(incoming) - 1)) if any(r["label"] for r in incoming) else 28
+            outgoing = sorted((r for r in routes if r["from"] == box["key"]),
+                              key=lambda r: r["exit_index"])
+            has_exits = len(outgoing) >= 2 or any(r["route"] != "adjacent" for r in outgoing)
+            height = 28 + 8 * max(0, len(incoming) - 1)
             parts.append(f'<div class="channel" aria-hidden="true" '
                          f'style="grid-row:ch-{i};grid-column:{lane_columns};min-height:{height}px"></div>')
-            for route in incoming:
-                if route["route"] == "main":
-                    parts.append(self.connector(by_key[route["from"]], box, used_lane_cols,
-                                                f'grid-row:ch-{i} / bx-{i};grid-column:{lane_columns};'
-                                                f'--arrival:{route["arrival"]:.4f}%', route))
+            adjacent = [r for r in incoming if r["route"] == "adjacent"]
+            for index, route in enumerate(adjacent):
+                label = "／".join(r["label"] for r in adjacent if r["label"]) if index == 0 else ""
+                parts.append(self.connector(by_key[route["from"]], box, used_lane_cols,
+                                            f'grid-row:ch-{i} / bx-{i};grid-column:{lane_columns};'
+                                            f'--arrival:{route["arrival"]}px', dict(route, label=label)))
             for col, lane in enumerate(used_lanes):
                 content = ""
                 occupied = lane["key"] == box["lane"]
                 if occupied:
-                    content = self.render_box_head(stream, box, i)
-                    exits = []
-                    for route in routes:
-                        if route["from"] != box["key"] or (route["type"] == "main" and not route["label"]):
-                            continue
-                        target = by_key[route["to"]]
-                        bid = esc(self.box_id(stream["key"], target["key"]))
-                        prefix = f'{route["label"]} → ' if route["label"] else '→ '
-                        exits.append(f'<a class="exit" href="#{bid}" data-open-box="{bid}">'
-                                     f'{esc(prefix)}{route["target"]} {esc(target["name"])}</a>')
-                    if exits:
-                        content += f'<div class="exits">{"".join(exits)}</div>'
+                    content = self.render_box_head(stream, box, i, len(outgoing))
                 parts.append(f'<div class="lanecell lane-{lane["kind"]}{" occupied" if occupied else ""}" '
                              f'style="grid-row:bx-{i};grid-column:{rails_l + col * 2 + 1} / span 2">'
                              f'{content}</div>')
-            parts.append(self.render_box_body(stream, box, f'grid-row:bd-{i};grid-column:{lane_columns}'))
+            if has_exits:
+                col = rails_l + 2 * used_lane_cols[box["lane"]] - 1
+                parts.append(f'<div class="exitcell" style="grid-row:ex-{i};grid-column:{col} / span 2">'
+                             f'{self.render_exits(stream, outgoing, by_key)}</div>')
+            full_exits = (self.render_exits(stream, outgoing, by_key, full=True)
+                          if has_exits or any(r["label"] for r in outgoing) else "")
+            parts.append(self.render_box_body(stream, box, f'grid-row:bd-{i};grid-column:{lane_columns}', full_exits))
         for route in routes:
-            if route["route"] != "main":
+            if route["route"] != "adjacent":
                 route = dict(route, from_lane=by_key[route["from"]]["lane"], to_lane=by_key[route["to"]]["lane"])
                 parts.append(self.render_graph_edge(stream, route, used_lane_cols, rails_l))
-        parts.append('</div></section>')
+        parts.append('</div></div></section>')
         return "".join(parts)
 
     def render_stream(self, stream):
@@ -749,6 +797,9 @@ class Board:
             '<span><span class="dot" style="background:var(--ai-accent)"></span>灰 = AIの実行</span>'
             '<span>☑ = この端末のチェック（正本反映は下の「報告をコピー」→AIへ）</span>'
             '<span>箱をタップすると中のタスクが開く</span></div>')
+        if any("next" in box or "optional" in box for stream in self.flow["streams"] for box in stream["boxes"]):
+            legend = legend[:-6] + ('<span>太線=既定の進行／細線=分岐／破線=例外／点線=戻り／'
+                                    '分岐 N=出口が複数ある箱</span></div>')
 
         timeline = ""
         if meta.get("milestones"):

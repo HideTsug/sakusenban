@@ -166,37 +166,67 @@ textarea.fallback{width:100%;max-width:640px;height:7em;font-size:.8rem;margin-t
 .twisty{transition:transform .12s}
 }
 /* Graph mode: half-lane columns share exact centers with the legacy connector geometry. */
-.flowgrid.graph{position:relative;gap:0;isolation:isolate}
+main:has(.flowgrid.graph){max-width:1280px}
+.graphwrap{overflow-x:auto}
+.flowgrid.graph{position:relative;gap:0;isolation:isolate;min-width:calc(var(--lanes)*13rem + (var(--rails-l) + var(--rails-r))*14px)}
 .flowgrid.graph>.lanehead{margin:0 4px 8px}
 .flowgrid.graph>.lanecell{margin:0 4px;flex-direction:column}
 .flowgrid.graph>.lanecell.occupied{position:relative;z-index:1;background:var(--surface)}
 .flowgrid.graph>.boxbody{position:relative;z-index:1;margin:8px 4px 0}
 .flowgrid.graph .flowbox.optional{border-style:dashed}
 .flowgrid.graph .chip.cond{background:var(--surface);color:var(--muted);border-color:var(--line)}
-.flowgrid.graph .exits{display:flex;flex-direction:column;gap:4px;width:100%;padding:6px 2px 0}
-.flowgrid.graph .exit{font-size:11px;line-height:1.5;overflow-wrap:anywhere;color:var(--muted);text-underline-offset:2px}
-.flowgrid.graph .exit:focus-visible{outline:2px solid var(--line-strong);outline-offset:2px}
+.flowgrid.graph .chip.fork{background:var(--surface-2);color:var(--muted)}
+.flowgrid.graph>.exitcell{min-width:0;margin:0 4px;position:relative;z-index:1;background:var(--surface)}
+/* Block siblings collapse their 2px margins: centers are exactly 13px + 24px*k. */
+.flowgrid.graph .exits{display:flow-root;list-style:none;margin:0;padding:0}
+.flowgrid.graph .exits>.exit{height:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flowgrid.graph .exit{font-size:11px;color:var(--muted);text-underline-offset:2px}
+.flowgrid.graph .exits .exit a{display:block;height:22px;line-height:22px;padding:0 4px;border-radius:4px;
+background:var(--surface-2);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0}
+.flowgrid.graph .exits .cond{display:inline-block;max-width:55%;vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+.flowgrid.graph .exit a:hover{text-decoration:underline}
+.flowgrid.graph .exit a:focus-visible{outline:2px solid var(--line-strong);outline-offset:-2px}
+.flowgrid.graph .exitlist{margin-bottom:12px;font-size:.8rem;overflow-wrap:anywhere}
+.flowgrid.graph .exitlist ol{margin:4px 0 0;padding-left:1.5em}
+.flowgrid.graph .exitlist .exit{font-size:inherit;margin:4px 0}
 .flowgrid.graph>.connector{position:absolute;inset:0;height:auto;margin:0}
-.flowgrid.graph .connector .v1{height:var(--arrival)}
-.flowgrid.graph .connector .h,.flowgrid.graph .connector .v2{top:var(--arrival)}
-.flowgrid.graph .connector .v2{height:calc(100% - var(--arrival))}
-.flowgrid.graph .connector.alt .v1,.flowgrid.graph .connector.alt .h,.flowgrid.graph .connector.alt .v2{border-style:dashed}
 /* A contents group lets every segment use the outer grid, including variable-height body rows. */
-.flowgrid.graph .edge{display:contents;--edge-style:solid;pointer-events:none}
-.flowgrid.graph .edge.return,.flowgrid.graph .edge.alt{--edge-style:dashed}
+.flowgrid.graph .edge{display:contents;pointer-events:none}
+.flowgrid.graph .edge,.flowgrid.graph .connector{--weight:1.5px;--pattern-h:none;--pattern-v:none;--period:10px}
+.flowgrid.graph .connector{--weight:2.5px}
+/* SVGs are alpha masks only; every visible stroke uses the same line token. */
+.flowgrid.graph .edge.alt{--pattern-h:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 1' preserveAspectRatio='none'%3E%3Cpath d='M0 .5H10' stroke='black' stroke-dasharray='6 4'/%3E%3C/svg%3E");
+--pattern-v:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 10' preserveAspectRatio='none'%3E%3Cpath d='M.5 0V10' stroke='black' stroke-dasharray='6 4'/%3E%3C/svg%3E")}
+.flowgrid.graph .edge.return{--period:5px;--pattern-h:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 1' preserveAspectRatio='none'%3E%3Cpath d='M0 .5H5' stroke='black' stroke-dasharray='2 3'/%3E%3C/svg%3E");
+--pattern-v:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 5' preserveAspectRatio='none'%3E%3Cpath d='M.5 0V5' stroke='black' stroke-dasharray='2 3'/%3E%3C/svg%3E")}
+.flowgrid.graph .connector .v1,.flowgrid.graph .connector .v2,.flowgrid.graph .edge .v,
+.flowgrid.graph .edge .h1::after,.flowgrid.graph .edge .h2::after,.flowgrid.graph .edge>.arrow::before{
+border:0;width:var(--weight);background:var(--line-strong);mask-image:var(--pattern-v);mask-size:100% var(--period);mask-repeat:no-repeat repeat}
+.flowgrid.graph .connector .h,.flowgrid.graph .edge .h1::before,.flowgrid.graph .edge .h2::before{
+border:0;height:var(--weight);background:var(--line-strong);mask-image:var(--pattern-h);mask-size:var(--period) 100%;mask-repeat:repeat no-repeat}
+.flowgrid.graph .connector .v1{height:var(--arrival)}
+.flowgrid.graph .connector .h{top:var(--arrival)}
+.flowgrid.graph .connector .v2{top:14px;height:calc(100% - 14px)}
 .flowgrid.graph .edge>span{position:absolute;display:block;pointer-events:none}
-.flowgrid.graph .edge .h1,.flowgrid.graph .edge .h2{border:0 var(--edge-style) var(--line-strong)}
-.flowgrid.graph .edge.skip .h1{left:0;right:7px;top:var(--departure);bottom:0;border-top-width:2px;border-right-width:2px}
-.flowgrid.graph .edge.skip .h2{left:0;right:7px;top:0;bottom:calc(100% - var(--arrival));border-bottom-width:2px;border-right-width:2px}
-.flowgrid.graph .edge.return .h1{left:7px;right:0;top:0;bottom:calc(100% - var(--departure));border-bottom-width:2px;border-left-width:2px}
-.flowgrid.graph .edge.return .h2{left:7px;right:0;top:var(--arrival);bottom:0;border-top-width:2px;border-left-width:2px}
-.flowgrid.graph .edge .v{top:0;bottom:0;width:0;border:0 var(--edge-style) var(--line-strong)}
-.flowgrid.graph .edge.skip .v{right:7px;border-right-width:2px}
-.flowgrid.graph .edge.return .v{left:7px;border-left-width:2px}
-.flowgrid.graph .edge>.arrow{left:0;top:var(--arrival);bottom:0;width:0;border-left:2px var(--edge-style) var(--line-strong)}
-.flowgrid.graph .edge>.arrow::after{content:"";position:absolute;left:-6px;bottom:0;border:5px solid transparent;border-bottom:0;border-top:6px solid var(--line-strong)}
+.flowgrid.graph .edge .h1{top:var(--departure);bottom:0}
+.flowgrid.graph .edge .h2{top:var(--arrival);bottom:0}
+.flowgrid.graph .edge.skip .h1{left:-4px;right:7px}
+.flowgrid.graph .edge.skip .h2{left:0;right:7px}
+.flowgrid.graph .edge.return .h1{left:7px;right:-4px}
+.flowgrid.graph .edge.return .h2{left:7px;right:0}
+.flowgrid.graph .edge .h1::before,.flowgrid.graph .edge .h2::before{content:"";position:absolute;left:0;right:0;top:0}
+.flowgrid.graph .edge .h1::after,.flowgrid.graph .edge .h2::after{content:"";position:absolute;top:0;bottom:0}
+.flowgrid.graph .edge.skip .h1::after,.flowgrid.graph .edge.skip .h2::after{right:0}
+.flowgrid.graph .edge.return .h1::after,.flowgrid.graph .edge.return .h2::after{left:0}
+.flowgrid.graph .edge.skip .h2::after{top:calc(0px - var(--arrival));height:calc(var(--arrival) + var(--weight));bottom:auto}
+.flowgrid.graph .edge.return .h1::after{top:calc(0px - var(--departure));height:calc(var(--departure) + var(--weight));bottom:auto}
+.flowgrid.graph .edge .v{top:0;bottom:0}
+.flowgrid.graph .edge.skip .v{right:7px}
+.flowgrid.graph .edge.return .v{left:7px}
+.flowgrid.graph .edge>.arrow{left:0;top:14px;bottom:0;width:var(--weight)}
+.flowgrid.graph .edge>.arrow::before{content:"";position:absolute;left:0;top:0;bottom:0}
+.flowgrid.graph .edge>.arrow::after{content:"";position:absolute;left:calc(var(--weight)/2 - 5px);bottom:0;
+border:5px solid transparent;border-bottom:0;border-top:6px solid var(--line-strong)}
 .flowgrid.graph .elabel{position:absolute;display:block;background:var(--surface);color:var(--muted);font-size:11px;line-height:16px;
 max-width:100%;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0}
-.flowgrid.graph .edge.skip .elabel{left:0;bottom:2px}
-.flowgrid.graph .edge.return .elabel{right:0;top:-2px;transform:translateY(-100%)}
-.flowgrid.graph .connector .elabel{left:calc((var(--from) + var(--to))/2);top:var(--arrival);transform:translate(-50%,-100%);max-width:calc(100% / var(--lanes))}
+.flowgrid.graph .connector .elabel{z-index:1;left:calc((var(--from) + var(--to))/2);top:var(--arrival);transform:translate(-50%,-100%);max-width:calc(100% / var(--lanes))}

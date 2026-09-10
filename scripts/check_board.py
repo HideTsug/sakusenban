@@ -89,6 +89,15 @@ def check_graph(grid, gi, report):
         if has(node, "edge"):
             source, target = attrs.get("data-edge-from"), attrs.get("data-edge-to")
             report(f"grid {gi} edge {source} -> {target}", source in ids and target in ids)
+        if has(node, "exit"):
+            links = ([node] if node["tag"] == "a" else
+                     [child for child in descendants(node) if child["tag"] == "a"])
+            report(f"grid {gi}: exit link exists", bool(links))
+            for link in links:
+                href = link["attrs"].get("href") or ""
+                open_box = link["attrs"].get("data-open-box")
+                report(f"grid {gi} exit {href} (data-open-box={open_box})",
+                       href.startswith("#") and href[1:] in ids and open_box == href[1:])
         if has(node, "connector"):
             values = style(node)
             try:
