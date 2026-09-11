@@ -621,9 +621,10 @@ class Board:
             routes.append(dict(edge, route=route, source=source, target=target))
         for box in boxes:
             outgoing = [r for r in routes if r["from"] == box["key"]]
-            # Forward spans descend, return spans ascend; stable ties keep input order.
-            outgoing.sort(key=lambda r: (0 if r["route"] == "adjacent" else
-                                         2 if r["route"] == "return" else 1,
+            # Forward spans descend, return spans ascend, adjacent exits come last.
+            # Stable ties keep input order within each group.
+            outgoing.sort(key=lambda r: (2 if r["route"] == "adjacent" else
+                                         1 if r["route"] == "return" else 0,
                                          r["source"] - r["target"]))
             for i, route in enumerate(outgoing):
                 route["exit_index"] = i
@@ -779,7 +780,7 @@ class Board:
                         f'data-edge-from="{esc(self.box_id(stream["key"], route["from"]))}" '
                         f'data-edge-to="{esc(self.box_id(stream["key"], route["to"]))}">'
                         f'<span class="v" style="grid-row:ex-{route["source"]} / ch-{route["target"]};'
-                        f'grid-column:{col} / {col + 1};top:calc({route["exit_index"]}*24px + 13px)"></span></div>')
+                        f'grid-column:{col} / {col + 1};top:calc({route["exit_index"]}*24px + 24px)"></span></div>')
             else:
                 route = dict(route, from_lane=by_key[route["from"]]["lane"], to_lane=by_key[route["to"]]["lane"])
                 parts.append(self.render_graph_edge(stream, route, used_lane_cols, rails_l))

@@ -12,6 +12,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
+import check_board
 import render
 
 
@@ -217,10 +218,10 @@ class RenderingTests(unittest.TestCase):
     def test_fanout_chips_headings_and_kinds(self):
         for fanout, chip, heading, kinds in (
             ("exclusive", '<span class="chip fork decision">◇ 判断 2</span>',
-             "◇ 出口（いずれか1つへ進む）", ("次段", "分岐")),
+             "◇ 出口（いずれか1つへ進む）", ("分岐", "次段")),
             ("parallel", '<span class="chip fork parallel">＋ 並列 2</span>',
              "＋ 出口（すべてへ進む）", ("並列", "並列")),
-            (None, '<span class="chip fork">分岐 2</span>', "出口", ("次段", "分岐")),
+            (None, '<span class="chip fork">分岐 2</span>', "出口", ("分岐", "次段")),
         ):
             with self.subTest(fanout=fanout):
                 fields = {"fanout": fanout} if fanout else {}
@@ -256,8 +257,8 @@ class RenderingTests(unittest.TestCase):
             self.assertEqual((compact, geometry), baseline)
 
     def test_return_and_exception_words_take_precedence(self):
-        for fanout, expected in (("exclusive", ["次段", "例外", "戻り"]),
-                                 ("parallel", ["並列", "並列", "戻り"])):
+        for fanout, expected in (("exclusive", ["例外", "戻り", "次段"]),
+                                 ("parallel", ["並列", "戻り", "並列"])):
             with self.subTest(fanout=fanout):
                 manifest = make_manifest(3)
                 boxes = manifest["flow"]["streams"][0]["boxes"]
@@ -291,6 +292,105 @@ class RenderingTests(unittest.TestCase):
                     self.assertEqual([board.box_state(box) for box in boxes], expected)
                     self.assertEqual([board.deps_of(task) for task in manifest["tasks"]], [[], [], [2]])
                     self.assertEqual(manifest, original)
+
+
+class GraphExitTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        manifest = render.load_manifest(ROOT / "examples/board.yaml")
+        state_rows = json.loads((ROOT / "examples/state.json").read_text(encoding="utf-8"))
+        cls.output = make_board(manifest, state_rows).render("", "")
+
+    def graph_checks(self, output):
+        parser = check_board.GridParser()
+        parser.feed(output)
+        self.assertEqual(len(parser.grids), 1)
+        checks = []
+        check_board.check_graph(parser.grids[0], 1,
+                                lambda label, good: checks.append((label, good)))
+        return checks
+
+    def test_example_main_exit_is_last_in_compact_and_full_lists(self):
+        for pattern in (
+            r'<div class="exitcell" style="grid-row:ex-3;[^"]*"><ol class="exits">(.*?)</ol>',
+            r'<div class="boxbody" id="boxbody-report-r3"[^>]*><div class="exitlist">.*?<ol>(.*?)</ol>',
+        ):
+            with self.subTest(pattern=pattern):
+                exits = re.search(pattern, self.output)
+                self.assertIsNotNone(exits)
+                self.assertEqual(re.findall(r'<b class="cond">(.*?)</b>', exits.group(1)),
+                                 ["差異あり", "一致"])
+                self.assertEqual(re.findall(r'<li class="exit ([^"]*)">', exits.group(1)),
+                                 ["return alt", "adjacent"])
+
+    def test_example_stem_starts_at_last_exit_bottom(self):
+        stem = re.search(r'<div class="edge stem main"[^>]*data-edge-from="box-report-r3" '
+                         r'data-edge-to="box-report-r4"><span class="v" style="([^"]*)">',
+                         self.output)
+        self.assertIsNotNone(stem)
+        self.assertEqual(stem.group(1),
+                         "grid-row:ex-3 / ch-4;grid-column:7 / 8;top:calc(1*24px + 24px)")
+
+    def test_three_exits_put_adjacent_after_skip_and_return(self):
+        manifest = make_manifest(3)
+        boxes = manifest["flow"]["streams"][0]["boxes"]
+        del boxes[0]["next"]
+        boxes[1].update(fanout="exclusive", criterion="結果", next=[
+            {"to": "b3", "label": "Continue"}, {"to": "b1", "label": "Retry"},
+            {"to": "b4", "label": "Skip"}])
+        self.assertEqual(validate_with_warnings(manifest)[0], [])
+        board = make_board(manifest)
+        routes, rails_l, rails_r = board.graph_routes(boxes, board.edges)
+        outgoing = sorted((route for route in routes if route["from"] == "b2"),
+                          key=lambda route: route["exit_index"])
+        self.assertEqual([(route["to"], route["route"], route["exit_index"])
+                          for route in outgoing],
+                         [("b4", "skip", 0), ("b1", "return", 1), ("b3", "adjacent", 2)])
+        self.assertEqual((rails_l, rails_r), (1, 1))
+        self.assertEqual([(route.get("rail"), route["arrival"]) for route in outgoing],
+                         [(1, 22), (1, 14), (None, 14)])
+        output = board.render("", "")
+        self.assertIn("top:calc(2*24px + 24px)", output)
+        self.assertTrue(all(good for _, good in self.graph_checks(output)))
+
+    def test_stem_check_uses_compact_exit_count(self):
+        checks = self.graph_checks(self.output)
+        self.assertTrue(all(good for _, good in checks), checks)
+        self.assertEqual(sum("top 最後の出口の底" in label for label, _ in checks), 1)
+
+    def test_stem_check_rejects_wrong_or_missing_top(self):
+        correct = "top:calc(1*24px + 24px)"
+        self.assertEqual(self.output.count(correct), 1)
+        for incorrect in ("top:calc(0*24px + 13px)", "top:calc(1*24px + 13px)",
+                          "top:calc(0*24px + 24px)", "top:calc(2*24px + 24px)", ""):
+            with self.subTest(top=incorrect):
+                checks = self.graph_checks(self.output.replace(correct, incorrect))
+                failures = [label for label, good in checks if not good]
+                self.assertEqual(len(failures), 1, failures)
+                self.assertIn("top 最後の出口の底", failures[0])
+
+    def test_stem_check_rejects_empty_exit_row(self):
+        output, count = re.subn(
+            r'(<div class="exitcell" style="grid-row:ex-3;[^"]*"><ol class="exits">).*?(</ol>)',
+            r'\1\2', self.output)
+        self.assertEqual(count, 1)
+        output = output.replace("top:calc(1*24px + 24px)", "top:calc(-1*24px + 24px)")
+        failures = [label for label, good in self.graph_checks(output) if not good]
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("top 最後の出口の底", failures[0])
+
+    def test_stem_check_keeps_grid_row_and_column_validation(self):
+        correct = "grid-row:ex-3 / ch-4;grid-column:7 / 8;top:"
+        self.assertEqual(self.output.count(correct), 1)
+        for incorrect, expected in (
+            ("grid-row:ex-3 / ch-3;grid-column:7 / 8;top:", "grid-row 両端"),
+            ("grid-row:ex-3 / ch-4;grid-column:6 / 7;top:", "grid-column 両端"),
+        ):
+            with self.subTest(placement=incorrect):
+                failures = [label for label, good in self.graph_checks(
+                    self.output.replace(correct, incorrect)) if not good]
+                self.assertEqual(len(failures), 1, failures)
+                self.assertIn(expected, failures[0])
 
 
 if __name__ == "__main__":

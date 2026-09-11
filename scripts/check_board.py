@@ -87,7 +87,10 @@ def check_graph(grid, gi, report):
     box_rows = {node["attrs"]["id"]: row.removeprefix("bx-")
                 for row, cells in rows.items() for cell in cells
                 for node in descendants(cell) if has(node, "flowbox") and node["attrs"].get("id")}
-    exit_rows = {style(child).get("grid-row") for child in grid["children"] if has(child, "exitcell")}
+    exit_counts = {style(child).get("grid-row"): sum(
+                       has(item, "exit") for group in descendants(child) if has(group, "exits")
+                       for item in group["children"])
+                   for child in grid["children"] if has(child, "exitcell")}
     stems = [node for node in nodes if has(node, "edge") and has(node, "stem")]
     adjacent_mains = [node for node in nodes if has(node, "connector")
                       and node["attrs"].get("data-edge-type") == "main"
@@ -121,8 +124,9 @@ def check_graph(grid, gi, report):
             source, target = attrs.get("data-edge-from"), attrs.get("data-edge-to")
             source_row, target_row = box_rows.get(source), box_rows.get(target)
             if (attrs.get("data-edge-type") != "main" or attrs.get("data-route") != "adjacent"
-                    or f"ex-{source_row}" not in exit_rows):
+                    or f"ex-{source_row}" not in exit_counts):
                 continue
+            exit_count = exit_counts[f"ex-{source_row}"]
             matching = [stem for stem in stems if stem["attrs"].get("data-edge-from") == source
                         and stem["attrs"].get("data-edge-to") == target]
             expected = sum(connector["attrs"].get("data-edge-from") == source
@@ -150,6 +154,9 @@ def check_graph(grid, gi, report):
                     except (KeyError, ValueError, StopIteration):
                         aligned = False
                     report(f"{label}: grid-column 両端・connector --from レーン中心", aligned)
+                    expected_top = f"calc({exit_count - 1}*24px + 24px)"
+                    report(f"{label}: top 最後の出口の底 (期待 {expected_top})",
+                           exit_count > 0 and placement.get("top") == expected_top)
 
 
 def check_file(path: str) -> bool:
