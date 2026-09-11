@@ -203,12 +203,41 @@ def validate(manifest):
                     errors.append(f"{where}: optional must be a boolean")
                 elif box_index == 0 and box["optional"]:
                     errors.append(f"{where}: the first box cannot be optional")
-            if "next" not in box:
-                continue
-            outgoing = box["next"]
+            fanout = box.get("fanout")
+            if "fanout" in box and fanout not in ("exclusive", "parallel"):
+                errors.append(f"{where}: fanout must be exclusive or parallel")
+            criterion = box.get("criterion")
+            if "criterion" in box:
+                if not isinstance(criterion, str) or not criterion.strip():
+                    errors.append(f"{where}: criterion must be a non-empty string")
+                elif len(criterion) > 24:
+                    warnings.append(f"{where}.criterion exceeds 24 characters ({len(criterion)})")
+                if fanout == "parallel":
+                    errors.append(f"{where}: criterion is only allowed for exclusive fanout")
+            outgoing = box.get("next", [])
             if not isinstance(outgoing, list):
                 errors.append(f"{where}: next must be an array")
                 continue
+            outgoing_count = len(outgoing) if "next" in box else 1
+            if "fanout" in box and outgoing_count < 2:
+                errors.append(f"{where}: fanout requires 2 or more outgoing edges")
+            if outgoing_count >= 2 and "fanout" not in box:
+                warnings.append(
+                    f"{where}: specify fanout: exclusive or parallel for 2 or more outgoing edges")
+            if fanout == "exclusive" and outgoing_count >= 3 and "criterion" not in box:
+                errors.append(f"{where}: criterion is required for 3 or more exclusive outgoing edges")
+            if outgoing_count >= 5:
+                errors.append(f"{where}: 5 or more outgoing edges: move the routing into a table "
+                              "or sub-board, or split the box")
+            elif outgoing_count >= 3:
+                if fanout == "exclusive":
+                    advice = "confirm they share one exclusive criterion or split the box"
+                elif fanout == "parallel":
+                    advice = "confirm all targets really proceed together or split the box"
+                else:
+                    advice = ("confirm whether they share one exclusive criterion or all targets "
+                              "really proceed together, or split the box")
+                warnings.append(f"{where}: 3 or more exits: {advice}")
             for edge_index, edge in enumerate(outgoing):
                 edge_where = f"{where}.next[{edge_index}]"
                 if not isinstance(edge, dict):
@@ -230,6 +259,8 @@ def validate(manifest):
                     warnings.append(f"{edge_where}.label exceeds 24 characters ({len(label)})")
                 if "kind" in edge and edge["kind"] != "alt":
                     errors.append(f"{edge_where}.kind must be alt when specified")
+                elif edge.get("kind") == "alt" and fanout == "parallel":
+                    errors.append(f"{edge_where}: kind: alt is only allowed for exclusive fanout")
 
         # Only analyze topology once this stream's keys, references and fields are valid.
         if stream.get("key") not in duplicate_stream_keys and len(errors) == stream_error_count:
@@ -517,7 +548,13 @@ class Board:
         if box.get("optional"):
             meta_bits.append('<span class="chip cond">条件付き</span>')
         if outgoing >= 2:
-            meta_bits.append(f'<span class="chip fork">分岐 {outgoing}</span>')
+            if box.get("fanout") == "exclusive":
+                title = f' title="判断基準: {esc(box["criterion"])}"' if box.get("criterion") else ""
+                meta_bits.append(f'<span class="chip fork decision"{title}>◇ 判断 {outgoing}</span>')
+            elif box.get("fanout") == "parallel":
+                meta_bits.append(f'<span class="chip fork parallel">＋ 並列 {outgoing}</span>')
+            else:
+                meta_bits.append(f'<span class="chip fork">分岐 {outgoing}</span>')
         if box.get("bundle"):
             meta_bits.append(f'<span class="bkey">束{esc(box["bundle"])}</span>')
         goal = self.box_goal(box)
@@ -647,6 +684,8 @@ class Board:
             f'{arrow}</div>')
 
     def render_exits(self, stream, outgoing, by_key, full=False):
+        box = by_key[outgoing[0]["from"]] if outgoing else {}
+        fanout = box.get("fanout")
         items = []
         for route in outgoing:
             target = by_key[route["to"]]
@@ -654,7 +693,8 @@ class Board:
             returning = route["route"] == "return"
             alt = route["kind"] == "alt"
             symbol = "↩" if returning else "⇢" if alt else "→"
-            kind = "戻り" if returning else "例外" if alt else "既定の進行" if route["route"] == "adjacent" else "分岐"
+            kind = ("戻り" if returning else "例外" if alt else "並列" if fanout == "parallel"
+                    else "次段" if route["route"] == "adjacent" else "分岐")
             condition = route["label"] or kind
             title = f'{condition} {symbol} {route["target"]} {target["name"]}'
             name = target["name"]
@@ -667,7 +707,13 @@ class Board:
                 f'<b class="cond">{esc(condition)}</b>{detail} '
                 f'<span class="to">{symbol} {route["target"]} {esc(name)}</span></a></li>')
         if full:
-            return f'<div class="exitlist"><b>出口</b><ol>{"".join(items)}</ol></div>'
+            heading = "出口"
+            if fanout == "exclusive":
+                criterion = f'{box["criterion"]}・' if box.get("criterion") else ""
+                heading = f"◇ 出口（{criterion}いずれか1つへ進む）"
+            elif fanout == "parallel":
+                heading = "＋ 出口（すべてへ進む）"
+            return f'<div class="exitlist"><b>{esc(heading)}</b><ol>{"".join(items)}</ol></div>'
         return f'<ol class="exits">{"".join(items)}</ol>'
 
     def render_graph_stream(self, stream, used_lanes, used_lane_cols):
@@ -811,7 +857,8 @@ class Board:
             '<span>箱をタップすると中のタスクが開く</span></div>')
         if any("next" in box or "optional" in box for stream in self.flow["streams"] for box in stream["boxes"]):
             legend = legend[:-6] + ('<span>実線=通常／破線=例外／点線=戻り／'
-                                    '分岐 N=出口が複数ある箱</span></div>')
+                                    '◇ 判断 N=結果でいずれか1本を選ぶ／＋ 並列 N=すべてへ進む／'
+                                    '分岐 N=種別未指定</span></div>')
 
         timeline = ""
         if meta.get("milestones"):

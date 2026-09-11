@@ -91,5 +91,7 @@ flow:
           lane: ai-b
           name: "独立検算"
           tasks: [4]
+          fanout: exclusive
+          criterion: "検算結果"
           next: [{to: r4, label: "一致"}, {to: r2, label: "差異あり", kind: alt}]
         - {key: r4, lane: both, name: "確認・合意・納品", tasks: [5]}

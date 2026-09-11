@@ -21,6 +21,7 @@ AI エージェントへ（同意ベース・一度だけ）:
 - **チェック→報告→反映のループ** — チェックは端末ローカルの報告シグナル。「AIへ報告をコピー」が機械可読テキストを吐き、AIが正本を検証・更新して盤を再生成する
 - **人間レーンとAIレーンの分離** — 人間の箱は「人間にしかできないこと」だけ。束（bundle）で同質の人間作業を1回の腰上げにまとめる
 - **依存の自動導出** — ready / blocked / done は deps と状態から renderer が計算する
+- **分岐は箱＋出口行で表す** — 判断（`fanout: exclusive`・◇）と並列展開（`fanout: parallel`・＋）を区別し、出線は原則 2 本・3〜4 本は確認つきで許容（排他は判断基準 `criterion` が必須）・5 本以上は生成エラー。判断ノードを別に作らず、合流の待ち条件は deps が正本
 - **外部リソース参照ゼロ** — 生成HTMLは自己完結（CSP の厳しい環境・オフラインでも開ける）
 - **デジタル庁デザインシステム準拠の見た目** — 配色・タイポグラフィは [DADS デザイントークン](https://github.com/digital-go-jp/design-tokens)（キーカラー #0017C1）ベースのフラットデザイン。ダークモードは独自拡張
 
@@ -62,7 +63,8 @@ python3 scripts/render.py board.yaml state.json --fragment > board-artifact.html
 | `templates/fragment.html` | 生成サンプル — Artifact 公開用（骨格なし断片） |
 | `docs/authoring-guide.md` | AI向けオーサリングガイド（設計思想・配色規範・報告プロトコル） |
 | `examples/` | 汎用サンプル（人間2人+AI2体の月次レポート段取り） |
-| `scripts/check.sh` | 機械検証ゲート（render 成功・両テンプレートの鮮度・出力モード・プレースホルダ） |
+| `scripts/test_validate.py` | validate / render の回帰テスト（分岐の `fanout`・`criterion`・出線本数の境界） |
+| `scripts/check.sh` | 機械検証ゲート（回帰テスト・render 成功・両テンプレートの鮮度・出力モード・プレースホルダ） |
 
 ## ライセンス
 

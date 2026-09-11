@@ -149,9 +149,18 @@
                     "lane": {"type": "string"},
                     "name": {"type": "string"},
                     "tasks": {"type": "array", "items": {"type": "integer"}},
+                    "fanout": {
+                      "enum": ["exclusive", "parallel"],
+                      "description": "出線2本以上の種別。exclusive はいずれか1本、parallel はすべてへ進む（kind: alt は不可）。2本未満での指定はエラー、2本以上で省略すると警告"
+                    },
+                    "criterion": {
+                      "type": "string",
+                      "pattern": "\\S",
+                      "description": "空白のみでない判断基準。exclusive の出線3本以上では必須、parallel では不可。24文字超は警告"
+                    },
                     "next": {
                       "type": "array",
-                      "description": "この箱の全出線。省略時は後続の最初の非 optional 箱へ進み、空配列なら出線なし",
+                      "description": "この箱の全出線。省略時は後続の最初の非 optional 箱へ進み、空配列なら出線なし。戻り・例外を含め3〜4本は警告、5本以上はエラー",
                       "items": {
                         "type": "object",
                         "required": ["to"],

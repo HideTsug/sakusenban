@@ -1,11 +1,17 @@
 #!/bin/bash
 # Mechanical invariant gate:
+#  0. validation and rendering regression tests pass
 #  1. render.py renders the example without errors (validate() included)
 #  2. both templates are exactly the regenerated outputs (no hand edits, no drift)
 #  3. each output mode has the required document structure
 #  4. no unresolved placeholders in assets
 set -u
 cd "$(dirname "$0")/.."
+
+if ! python3 scripts/test_validate.py; then
+  echo "FAIL: validation and rendering tests failed" >&2
+  exit 1
+fi
 
 TMP_TEMPLATE="$(mktemp /tmp/sakusenban-template.XXXXXX)"
 TMP_FRAGMENT="$(mktemp /tmp/sakusenban-fragment.XXXXXX)"
@@ -84,4 +90,4 @@ for ph in __BOARD_KEY__ __REPORT_HEAD__; do
   fi
 done
 
-echo "OK: render + template freshness + output modes + placeholders"
+echo "OK: tests + render + template freshness + output modes + placeholders"
