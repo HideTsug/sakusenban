@@ -154,9 +154,11 @@ def check_graph(grid, gi, report):
                     except (KeyError, ValueError, StopIteration):
                         aligned = False
                     report(f"{label}: grid-column 両端・connector --from レーン中心", aligned)
-                    expected_top = f"calc({exit_count - 1}*24px + 24px)"
-                    report(f"{label}: top 最後の出口の底 (期待 {expected_top})",
-                           exit_count > 0 and placement.get("top") == expected_top)
+                    expected_start = f"calc({exit_count - 1}*24px + 24px)"
+                    report(f"{label}: --stem-start 最後の出口の底 (期待 {expected_start})",
+                           exit_count > 0 and placement.get("--stem-start") == expected_start)
+                    report(f"{label}: inline top なし",
+                           all(key.lower() != "top" for key in placement))
 
 
 def check_file(path: str) -> bool:
