@@ -780,7 +780,7 @@ class Board:
                         f'data-edge-from="{esc(self.box_id(stream["key"], route["from"]))}" '
                         f'data-edge-to="{esc(self.box_id(stream["key"], route["to"]))}">'
                         f'<span class="v" style="grid-row:ex-{route["source"]} / ch-{route["target"]};'
-                        f'grid-column:{col} / {col + 1};top:calc({route["exit_index"]}*24px + 24px)"></span></div>')
+                        f'grid-column:{col} / {col + 1};--stem-start:calc({route["exit_index"]}*24px + 24px)"></span></div>')
             else:
                 route = dict(route, from_lane=by_key[route["from"]]["lane"], to_lane=by_key[route["to"]]["lane"])
                 parts.append(self.render_graph_edge(stream, route, used_lane_cols, rails_l))

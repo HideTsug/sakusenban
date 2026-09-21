@@ -329,7 +329,7 @@ class GraphExitTests(unittest.TestCase):
                          self.output)
         self.assertIsNotNone(stem)
         self.assertEqual(stem.group(1),
-                         "grid-row:ex-3 / ch-4;grid-column:7 / 8;top:calc(1*24px + 24px)")
+                         "grid-row:ex-3 / ch-4;grid-column:7 / 8;--stem-start:calc(1*24px + 24px)")
 
     def test_three_exits_put_adjacent_after_skip_and_return(self):
         manifest = make_manifest(3)
@@ -350,41 +350,65 @@ class GraphExitTests(unittest.TestCase):
         self.assertEqual([(route.get("rail"), route["arrival"]) for route in outgoing],
                          [(1, 22), (1, 14), (None, 14)])
         output = board.render("", "")
-        self.assertIn("top:calc(2*24px + 24px)", output)
+        self.assertIn("--stem-start:calc(2*24px + 24px)", output)
         self.assertTrue(all(good for _, good in self.graph_checks(output)))
 
     def test_stem_check_uses_compact_exit_count(self):
         checks = self.graph_checks(self.output)
         self.assertTrue(all(good for _, good in checks), checks)
-        self.assertEqual(sum("top 最後の出口の底" in label for label, _ in checks), 1)
+        self.assertEqual(sum("--stem-start 最後の出口の底" in label for label, _ in checks), 1)
 
-    def test_stem_check_rejects_wrong_or_missing_top(self):
-        correct = "top:calc(1*24px + 24px)"
+    def test_stem_check_rejects_wrong_or_missing_start(self):
+        correct = "--stem-start:calc(1*24px + 24px)"
         self.assertEqual(self.output.count(correct), 1)
-        for incorrect in ("top:calc(0*24px + 13px)", "top:calc(1*24px + 13px)",
-                          "top:calc(0*24px + 24px)", "top:calc(2*24px + 24px)", ""):
-            with self.subTest(top=incorrect):
+        for incorrect in ("--stem-start:calc(0*24px + 13px)", "--stem-start:calc(1*24px + 13px)",
+                          "--stem-start:calc(0*24px + 24px)", "--stem-start:calc(2*24px + 24px)", ""):
+            with self.subTest(start=incorrect):
                 checks = self.graph_checks(self.output.replace(correct, incorrect))
                 failures = [label for label, good in checks if not good]
                 self.assertEqual(len(failures), 1, failures)
-                self.assertIn("top 最後の出口の底", failures[0])
+                self.assertIn("--stem-start 最後の出口の底", failures[0])
+
+    def test_stem_check_rejects_inline_top(self):
+        correct = "--stem-start:calc(1*24px + 24px)"
+        self.assertEqual(self.output.count(correct), 1)
+        for declaration in ("top:calc(1*24px + 24px)", "top:0", "top:auto", "top:",
+                            "TOP:24px", "Top:24px"):
+            with self.subTest(declaration=declaration):
+                output = self.output.replace(correct, f"{correct};{declaration}")
+                failures = [label for label, good in self.graph_checks(output) if not good]
+                self.assertEqual(len(failures), 1, failures)
+                self.assertIn("inline top なし", failures[0])
+        output = self.output.replace(correct, "top:calc(1*24px + 24px)")
+        failures = [label for label, good in self.graph_checks(output) if not good]
+        self.assertEqual(len(failures), 2, failures)
+        self.assertTrue(any("--stem-start 最後の出口の底" in label for label in failures))
+        self.assertTrue(any("inline top なし" in label for label in failures))
+
+    def test_stem_check_rejects_missing_stem(self):
+        output, count = re.subn(r'<div class="edge stem main"[^>]*>.*?</div>',
+                                "", self.output)
+        self.assertEqual(count, 1)
+        failures = [label for label, good in self.graph_checks(output) if not good]
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("count=0 (期待 1)", failures[0])
 
     def test_stem_check_rejects_empty_exit_row(self):
         output, count = re.subn(
             r'(<div class="exitcell" style="grid-row:ex-3;[^"]*"><ol class="exits">).*?(</ol>)',
             r'\1\2', self.output)
         self.assertEqual(count, 1)
-        output = output.replace("top:calc(1*24px + 24px)", "top:calc(-1*24px + 24px)")
+        output = output.replace("--stem-start:calc(1*24px + 24px)", "--stem-start:calc(-1*24px + 24px)")
         failures = [label for label, good in self.graph_checks(output) if not good]
         self.assertEqual(len(failures), 1, failures)
-        self.assertIn("top 最後の出口の底", failures[0])
+        self.assertIn("--stem-start 最後の出口の底", failures[0])
 
     def test_stem_check_keeps_grid_row_and_column_validation(self):
-        correct = "grid-row:ex-3 / ch-4;grid-column:7 / 8;top:"
+        correct = "grid-row:ex-3 / ch-4;grid-column:7 / 8;--stem-start:"
         self.assertEqual(self.output.count(correct), 1)
         for incorrect, expected in (
-            ("grid-row:ex-3 / ch-3;grid-column:7 / 8;top:", "grid-row 両端"),
-            ("grid-row:ex-3 / ch-4;grid-column:6 / 7;top:", "grid-column 両端"),
+            ("grid-row:ex-3 / ch-3;grid-column:7 / 8;--stem-start:", "grid-row 両端"),
+            ("grid-row:ex-3 / ch-4;grid-column:6 / 7;--stem-start:", "grid-column 両端"),
         ):
             with self.subTest(placement=incorrect):
                 failures = [label for label, good in self.graph_checks(
